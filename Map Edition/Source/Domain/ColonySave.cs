@@ -1,0 +1,92 @@
+namespace RedMeridian.Domain;
+
+sealed partial class Colony
+{
+    static readonly string[] LegacyMaterials = ["ore","water","food","alloy","research"];
+    static readonly string[] LegacyMetrics = ["temperature","pressure","oxygen","surface-water"];
+
+    public SaveData Export()
+    {
+        var tiles = new List<int[]>(counts.Sum());
+        var structures = new List<SavedStructure>();
+        for (int index = 0; index < Grid.Length; index++)
+        {
+            if (Grid[index] == 0) continue;
+            tiles.Add([index,Grid[index]]);
+            int level = Level(index);
+            bool off = disabled.Contains(index);
+            if (Widths[index] != 1 || Heights[index] != 1 || level != 1 || off)
+                structures.Add(new(index,Widths[index],Heights[index],level,off));
+        }
+        return new(4,tiles.ToArray(),null,population,tick,null,new(stock),new(planet),power.Charge,MapSettings,structures.ToArray());
+    }
+
+    public static Colony Restore(GameRules rules,SaveData? save)
+    {
+        if (save is null || save.Version is not (1 or 2 or 3 or 4) || save.Tiles is null ||
+            save.Tiles.Length > Size * Size || save.Population is < 0 or > MaxPopulation ||
+            save.Tick is < 0 or >= long.MaxValue || save.Charge < 0)
+            throw new InvalidOperationException("Invalid colony save.");
+        var colony = new Colony(rules,map: save.Version == 4 ? save.Map : null,empty: true)
+            { population = save.Population, tick = save.Tick };
+        var structures = new Dictionary<int,SavedStructure>();
+        if (save.Version == 4 && save.Structures is not null)
+        {
+            foreach (var details in save.Structures)
+                if (details is null || !structures.TryAdd(details.Index,details))
+                    throw new InvalidOperationException("Duplicate or invalid structure metadata.");
+        }
+        int maxType = Math.Min(rules.Buildings.Length,save.Version == 1 ? 6 : save.Version == 2 ? 10 : byte.MaxValue);
+        foreach (var tile in save.Tiles)
+        {
+            if (tile is not { Length: 2 } || (uint)tile[0] >= colony.Grid.Length ||
+                tile[1] < 1 || tile[1] > maxType || colony.Grid[tile[0]] != 0)
+                throw new InvalidOperationException("Invalid or unknown structure in colony save.");
+            int index = tile[0], type = tile[1];
+            var details = structures.Remove(index,out var saved) ? saved : new SavedStructure(index);
+            var shape = new Footprint(details.Width,details.Height);
+            if (!colony.surface.Open(index,shape) || details.Level < 1 || details.Level > colony.groups[type - 1].Length)
+                throw new InvalidOperationException("Invalid footprint, overlap or upgrade level in save.");
+            colony.Place(index,type,shape,details.Level,details.Disabled);
+        }
+
+        if (structures.Count > 0) throw new InvalidOperationException("Structure metadata has no matching tile.");
+
+        void Material(string id,long amount)
+        {
+            if (!colony.stock.ContainsKey(id) || amount is < 0 or > StockLimit)
+                throw new InvalidOperationException($"Invalid or unknown saved material: {id}.");
+            colony.stock[id] = amount;
+        }
+        void PlanetMetric(string id,int value)
+        {
+            var metric = rules.World.Metrics.FirstOrDefault(m => m.Id == id);
+            if (metric is null) throw new InvalidOperationException($"Unknown saved planet metric: {id}.");
+            colony.planet[id] = Math.Clamp(value,metric.Initial,metric.Target);
+        }
+
+        if (save.Version >= 3)
+        {
+            if (save.Materials is null || save.Metrics is null) throw new InvalidOperationException("Missing saved inventories or planet metrics.");
+            foreach (var (id,value) in save.Materials) Material(id,value);
+            foreach (var (id,value) in save.Metrics) PlanetMetric(id,value);
+        }
+        else
+        {
+            int resourceCount = save.Version == 1 ? 4 : 5;
+            if (save.Stock is null || save.Stock.Length != resourceCount)
+                throw new InvalidOperationException("Invalid legacy inventory.");
+            for (int i = 0; i < resourceCount; i++) Material(LegacyMaterials[i],save.Stock[i]);
+            if (save.Version == 2)
+            {
+                if (save.Planet is not { Length: 4 }) throw new InvalidOperationException("Invalid legacy planet metrics.");
+                for (int i = 0; i < LegacyMetrics.Length; i++) PlanetMetric(LegacyMetrics[i],save.Planet[i]);
+            }
+        }
+        colony.housing = rules.Buildings.Sum(b => colony.counts[b.Id - 1] * b.Beds);
+        colony.RefreshCapacity();
+        colony.power.Restore(save.Charge);
+        colony.RefreshInitialOutput();
+        return colony;
+    }
+}

@@ -1,0 +1,68 @@
+[
+  {
+    "id": "thermal",
+    "name": "Atmospheric heating",
+    "points": 18,
+    "requires": []
+  },
+  {
+    "id": "algae",
+    "name": "Bioreactors",
+    "points": 30,
+    "requires": []
+  },
+  {
+    "id": "hydrology",
+    "name": "Hydrological engineering",
+    "points": 45,
+    "requires": []
+  },
+  {
+    "id": "survey",
+    "name": "Geophysical surveying",
+    "points": 9,
+    "requires": []
+  },
+  {
+    "id": "grid",
+    "name": "Planetary power systems",
+    "points": 24,
+    "requires": [
+      "survey"
+    ]
+  },
+  {
+    "id": "habitats",
+    "name": "Settlement engineering",
+    "points": 36,
+    "requires": [
+      "survey"
+    ]
+  },
+  {
+    "id": "deep",
+    "name": "Deep-core science",
+    "points": 60,
+    "requires": [
+      "survey"
+    ]
+  },
+  {
+    "id": "fission",
+    "name": "Compact fission",
+    "points": 90,
+    "requires": [
+      "deep",
+      "grid"
+    ]
+  },
+  {
+    "id": "orbital",
+    "name": "Orbital infrastructure",
+    "points": 150,
+    "requires": [
+      "deep",
+      "habitats"
+    ]
+  }
+]

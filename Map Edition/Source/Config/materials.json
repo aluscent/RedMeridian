@@ -1,0 +1,62 @@
+[
+  {
+    "id": "ore",
+    "name": "Iron ore",
+    "symbol": "ore",
+    "initial": 24
+  },
+  {
+    "id": "water",
+    "name": "Water",
+    "symbol": "H₂O",
+    "initial": 24
+  },
+  {
+    "id": "food",
+    "name": "Food",
+    "symbol": "food",
+    "initial": 24
+  },
+  {
+    "id": "alloy",
+    "name": "Alloy",
+    "symbol": "A",
+    "initial": 24
+  },
+  {
+    "id": "research",
+    "name": "Research",
+    "symbol": "RP",
+    "initial": 0
+  },
+  {
+    "id": "silicon",
+    "name": "Silicon",
+    "symbol": "Si",
+    "initial": 0
+  },
+  {
+    "id": "titanium",
+    "name": "Titanium",
+    "symbol": "Ti",
+    "initial": 0
+  },
+  {
+    "id": "brine",
+    "name": "Brine",
+    "symbol": "brine",
+    "initial": 0
+  },
+  {
+    "id": "uranium",
+    "name": "Uranium",
+    "symbol": "U",
+    "initial": 0
+  },
+  {
+    "id": "propellant",
+    "name": "Propellant",
+    "symbol": "fuel",
+    "initial": 0
+  }
+]
