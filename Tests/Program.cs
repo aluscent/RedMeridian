@@ -12,6 +12,8 @@ var rules = new GameRules(Path.Combine(AppContext.BaseDirectory, "Config"));
     ("Observatory narrows forecasts and preserves the last reading when offline", WeatherObservatory),
     ("Spacecraft found bases, retain blocked cargo, and restore without duplicate delivery", SpaceLogistics),
     ("Recurring routes respect reserves and avoid counting inbound cargo twice", RecurringCargo),
+    ("Assembly pauses offline and preserves typed orders through saves", TimedAssembly),
+    ("Planetary engineering requires long-term investment and runs only on planets", PlanetaryEngineering),
     ("Research requires explicit activation and preserves legacy unlocks", ResearchActivation),
     ("Tester commands are gated by server configuration", TesterCommands),
     ("Current saves preserve map edits, upgrades, and shutdowns", CurrentSaveRoundTrip),
@@ -160,8 +162,15 @@ SpaceProgram LaunchReadyProgram()
     mars.Build(3, Id("terminal"));
     var program = new SpaceProgram(rules, mars);
     program.Step();
-    program.Assemble(mars);
+    AssembleShuttle(program);
     return program;
+}
+
+void AssembleShuttle(SpaceProgram program)
+{
+    var type = rules.ShipType(GameRules.LegacyShipType);
+    program.Assemble(program.Mars, 2, type.Id);
+    for (int i = 0; i < type.BuildTicks; i++) program.Step();
 }
 
 void SpaceLogistics()
@@ -170,7 +179,7 @@ void SpaceLogistics()
     var program = LaunchReadyProgram();
     var mars = program.Mars;
     long before = mars.Stock("alloy");
-    Reject(() => program.Dispatch(mars, 1, orbitId, new() { ["alloy"] = SpaceProgram.Payload + 1 }));
+    Reject(() => program.Dispatch(mars, 1, orbitId, new() { ["alloy"] = rules.ShipType(GameRules.LegacyShipType).Payload + 1 }));
     Equal(before, mars.Stock("alloy"));
     program.Dispatch(mars, 1, orbitId, new() { ["alloy"] = 20, ["propellant"] = 10, ["food"] = 10, ["water"] = 10 });
     Equal(before - 20 - SpaceProgram.FoundingAlloy, mars.Stock("alloy"));
@@ -180,14 +189,24 @@ void SpaceLogistics()
     var orbit = program.Base(orbitId);
     Equal(program.Mars.Tick, orbit.Tick);
     Equal(20L, orbit.Stock("alloy"));
-    Equal(16, orbit.Site.Size);
+    Equal(5, orbit.Site.Width);
+    Equal(150, orbit.Site.Height);
+    var legacy = program.Export();
+    legacy.Space!.Bases[orbitId] = legacy.Space.Bases[orbitId] with { LongOrbit = false };
+    Equal(16, SpaceProgram.Restore(rules, legacy).Base(orbitId).Site.Width);
+    string research = rules.World.ResearchMaterial;
+    var milestone = rules.Research.First(item => item.Requires.Length == 0);
+    orbit.Receive(new() { [research] = milestone.Points });
+    orbit.ActivateResearch(milestone.Id);
+    Equal(true, program.Mars.Export().ActivatedResearch!.Contains(milestone.Id));
+    Equal(true, SpaceProgram.Restore(rules, program.Export()).Mars.Export().ActivatedResearch!.Contains(milestone.Id));
     Reject(() => orbit.Build(0, 1));
     int iron = rules.Buildings.Single(b => b.Deposit == "iron").Id;
     Reject(() => orbit.Build(510 * Colony.Size + 510, iron));
     int lab = rules.Buildings.Single(b => b.Art == "lab" && b.Outputs.ContainsKey("research")).Id;
     orbit.Build(510 * Colony.Size + 510, lab);
     program.Step();
-    Equal(3L, orbit.Stock("research"));
+    Equal(milestone.Points+3, orbit.Stock("research"));
     program.Dispatch(orbit, 1, "mars", new() { ["propellant"] = 1 });
     program.Mars.Toggle(3);
     for (int i = 0; i < 6; i++) program.Step();
@@ -208,8 +227,8 @@ void RecurringCargo()
     var program = LaunchReadyProgram();
     program.Dispatch(program.Mars, 1, orbitId, new() { ["propellant"] = 10 });
     for (int i = 0; i < 7; i++) program.Step();
-    program.Assemble(program.Mars);
-    program.Assemble(program.Mars);
+    AssembleShuttle(program);
+    AssembleShuttle(program);
     int reserve = (int)program.Mars.Stock("alloy") - 9;
     program.SetRoute(new(2, "mars", orbitId, "alloy", reserve, 9));
     program.SetRoute(new(3, "mars", orbitId, "alloy", 0, 9));
@@ -220,6 +239,47 @@ void RecurringCargo()
     for (int i = 0; i < 7; i++) program.Step();
     Equal(9L, program.Base(orbitId).Stock("alloy"));
     Equal<string?>(null, program.Export().Space!.Ships[1].Destination);
+}
+
+void TimedAssembly()
+{
+    var program = LaunchReadyProgram();
+    var type = rules.ShipType("heavy-freighter");
+    program.Mars.Receive(new() { ["titanium"] = 12 });
+    program.Assemble(program.Mars, 2, type.Id);
+    Equal(1, program.Export().Space!.Ships.Length);
+    Equal(type.BuildTicks, program.Mars.Export().Assembly!.Single().TicksLeft);
+    Reject(() => program.Mars.Remove(2));
+    program.Mars.Toggle(2);
+    program.Step();
+    program = SpaceProgram.Restore(rules, program.Export());
+    Equal(type.BuildTicks, program.Mars.Export().Assembly!.Single().TicksLeft);
+    program.Mars.Toggle(2);
+    for (int i = 0; i < type.BuildTicks; i++) program.Step();
+    Equal(type.Id, program.Export().Space!.Ships[1].Type);
+    long fuel = program.Mars.Stock("propellant");
+    program.Dispatch(program.Mars, 2, "mars-orbit-1", new() { ["alloy"] = 70 });
+    Equal(fuel - (8 * type.FuelPercent + 99) / 100, program.Mars.Stock("propellant"));
+}
+
+void PlanetaryEngineering()
+{
+    var initial = new Colony(rules, empty: true).Export();
+    int center = 511 * Colony.Size + 511;
+    var heat = rules.Buildings.Single(item => item.Effects.ContainsKey("temperature"));
+    initial.Materials!["ore"] = 10_000;
+    initial.Materials["propellant"] = 10_000;
+    initial.Materials["food"] = 10_000;
+    initial.Materials["water"] = 10_000;
+    initial = initial with { Tiles = [[center, heat.Id], [center+1, 1], [center+2, 1], [center+3, 6]] };
+    var mars = Colony.Restore(rules, initial);
+    var europa = Colony.Restore(rules, initial, ColonySite.All.Single(site => site.Id == "europa"));
+    var temperature = rules.World.Metrics.Single(metric => metric.Id == "temperature");
+    for (int i = 0; i < 300; i++) { mars.Step(); europa.Step(); }
+    Equal(temperature.Initial + 300, mars.Export().Metrics!["temperature"]);
+    Equal(temperature.Initial, europa.Export().Metrics!["temperature"]);
+    for (int i = 300; i < 750; i++) mars.Step();
+    Equal(temperature.Target, mars.Export().Metrics!["temperature"]);
 }
 
 void LegacySave()

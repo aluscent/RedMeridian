@@ -21,7 +21,8 @@ async function pngDimensions(edition, image) {
 test("both editions include the configured PNGs and correctly sized terrain assets", async () => {
   for (const edition of [source, play]) {
     const buildings = await readJson(new URL("Config/buildings.json", edition));
-    const images = buildings.filter(building => building.image).map(building => building.image);
+    const images = [...new Set(buildings.flatMap(building =>
+      [building.image, ...Object.values(building.environmentImages ?? {})]).filter(Boolean))];
     assert.ok(images.length > 0, "expected a catalog with custom building art");
     for (const image of images) {
       const [width, height] = await pngDimensions(edition, image);
@@ -86,8 +87,8 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   const catalog = await (await get("/api/catalog")).json();
   const network = await (await get("/api/logistics")).json();
   assert.deepEqual(network.bases.map(base => base.id), ["mars"]);
-  assert.ok(network.sites.some(site => site.kind === "orbit" && site.size === 16));
-  assert.ok(network.sites.some(site => site.kind === "moon" && site.size === 316));
+  assert.ok(network.sites.some(site => site.kind === "orbit" && site.width === 5 && site.height === 150));
+  assert.ok(network.sites.some(site => site.kind === "moon" && site.width === 316 && site.height === 316));
   assert.match(await (await get("/")).text(), /game\.js/);
   const mine = catalog.buildings.find(building => building.deposit === "iron");
   const image = await get("/" + mine.image);

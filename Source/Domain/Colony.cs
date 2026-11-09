@@ -6,7 +6,7 @@ record SaveData(int Version, int[][]? Tiles, long[]? Stock, int Population, long
     Dictionary<string,long>? Materials = null, Dictionary<string,int>? Metrics = null, long Charge = 0,
     MapSettings? Map = null, SavedStructure[]? Structures = null,
     Dictionary<int,WeatherForecast>? WeatherForecasts = null, SpaceSave? Space = null,
-    string[]? ActivatedResearch = null);
+    string[]? ActivatedResearch = null, bool LongOrbit = false, AssemblyOrder[]? Assembly = null);
 
 
 sealed partial class Colony
@@ -21,7 +21,7 @@ sealed partial class Colony
     readonly Surface surface;
     readonly Dictionary<int,int> levels = new();
     readonly HashSet<int> disabled = new();
-    readonly HashSet<string> activatedResearch = new();
+    HashSet<string> activatedResearch = new();
     readonly ProductionGroup[][] groups;
     readonly ProductionGroup[] producers, consumers, batteries;
     readonly ProductionGroup[] observatories;
@@ -44,7 +44,7 @@ sealed partial class Colony
     {
         this.rules = rules;
         Site = site ?? ColonySite.Mars;
-        allowedBuildings = rules.Buildings.Where(Site.Allows).Select(building => building.Id).ToArray();
+        allowedBuildings = rules.Buildings.Where(building => Site.Allows(building)).Select(building => building.Id).ToArray();
         counts = new int[rules.Buildings.Length];
         surface = new Surface(rules,map);
         groups = rules.Buildings.Select(b => new[] { new ProductionGroup(b) }
@@ -133,7 +133,7 @@ sealed partial class Colony
             housing += running * consumer.Beds;
             foreach (var (id,amount) in consumer.Outputs)
                 stock[id] = Math.Min(StockLimit,stock[id] + (long)amount * running);
-            if (running > 0)
+            if (running > 0 && Site.PlanetaryEngineering)
             {
                 foreach (var metric in rules.World.Metrics)
                     if (consumer.Effects.TryGetValue(metric.Id,out int increase))
@@ -154,6 +154,7 @@ sealed partial class Colony
     int Available(ProductionGroup group,int crew)
     {
         var b = group.Building;
+        if (!Site.PlanetaryEngineering && b.Effects.Count > 0) return 0;
         int running = group.Count;
         if (b.Crew > 0) running = Math.Min(running,crew / b.Crew);
         foreach (var (id,amount) in b.Inputs) running = (int)Math.Min(running,stock[id] / amount);
@@ -205,6 +206,12 @@ sealed partial class Colony
         return $"{milestone.Name} activated.";
     }
 
+    public void ShareResearchWith(Colony colony)
+    {
+        activatedResearch.UnionWith(colony.activatedResearch);
+        colony.activatedResearch = activatedResearch;
+    }
+
     public object Status(int revision,bool stress,bool paused,int speed,bool started = true,bool hasSave = false,
         int worldRevision = 0,int inspect = -1,bool developerMode = false) => new
     {
@@ -214,7 +221,7 @@ sealed partial class Colony
         supply = generated, demand, used, crewUsed, crewCapacity = population * rules.World.CrewPerColonist,
         batteryCharge = power.Charge, batteryCapacity = power.Capacity, batteryAvailable = power.Available,
         shortage, storm = Storm, planet = new Dictionary<string,int>(planet),
-        complete = rules.World.Metrics.All(m => planet[m.Id] >= m.Target),
+        complete = Site.PlanetaryEngineering && rules.World.Metrics.All(m => planet[m.Id] >= m.Target),
         unlocked = activatedResearch.ToArray(),
         counts = counts.ToArray(), active = groups.Select(group => group.Sum(g => g.Active)).ToArray(), total = counts.Sum(),
         tickMs = stepTimes.Count == 0 ? 0 : stepTimes.Order().ElementAt((int)Math.Ceiling(stepTimes.Count * .95) - 1)

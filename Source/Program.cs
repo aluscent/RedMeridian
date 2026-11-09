@@ -12,7 +12,7 @@ app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = context => context.Context.Response.Headers.CacheControl = "no-cache"
 });
-app.MapGet("/api/catalog", (GameRules rules) => new { rules.Buildings, rules.Materials, rules.Research, rules.World });
+app.MapGet("/api/catalog", (GameRules rules) => new { rules.Buildings, rules.Materials, rules.Research, rules.World, rules.ShipTypes });
 app.MapGet("/api/state", (int? inspect, ColonySession session) => session.Read(inspect ?? -1));
 app.MapGet("/api/surface", (ColonySession session) => session.Surface());
 app.MapGet("/api/map", (HttpContext context, ColonySession session) => session.Map(context));
@@ -40,7 +40,7 @@ async Task TickLoop(ColonySession session, CancellationToken cancellation)
 record Command(string? Action, int Index = -1, int Type = 0, int Revision = -1, SaveData? Save = null,
     int EndIndex = -1, MapSettings? Map = null, string? Base = null, int Ship = 0,
     Dictionary<string,long>? Cargo = null, CargoRoute? Route = null, string? Technology = null,
-    string? Material = null, int Amount = 0);
+    string? Material = null, int Amount = 0, string? ShipType = null);
 
 
 sealed class ColonySession
@@ -280,8 +280,8 @@ sealed class ColonySession
         switch (command.Action)
         {
             case "assemble":
-                program.Assemble(Current);
-                return "Spacecraft assembled.";
+                program.Assemble(Current, command.Index, command.ShipType);
+                return "Spacecraft assembly started.";
             case "dispatch":
                 program.Dispatch(Current, command.Ship, command.Base, command.Cargo);
                 return "Spacecraft launched.";

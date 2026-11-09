@@ -165,28 +165,28 @@
       "name": "Temperature",
       "unit": "°C",
       "initial": -600,
-      "target": 80
+      "target": 150
     },
     {
       "id": "pressure",
       "name": "Pressure",
       "unit": " kPa",
       "initial": 6,
-      "target": 700
+      "target": 1013
     },
     {
       "id": "oxygen",
       "name": "Oxygen",
       "unit": "%",
       "initial": 1,
-      "target": 140
+      "target": 210
     },
     {
       "id": "surface-water",
       "name": "Surface water",
       "unit": "%",
       "initial": 0,
-      "target": 90
+      "target": 300
     }
   ]
 }

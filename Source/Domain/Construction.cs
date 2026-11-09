@@ -36,6 +36,7 @@ sealed partial class Colony
     {
         int index = RequireStructure(tile);
         var b = rules.Buildings[Grid[index] - 1];
+        if (assemblyOrders.ContainsKey(index)) throw new InvalidOperationException("Finish spacecraft assembly before demolishing the yard.");
         var salvage = new Dictionary<string,long>();
         Demolish(index,salvage);
         RefreshCapacity();
@@ -76,6 +77,8 @@ sealed partial class Colony
         }
         if (edits.Count == 0)
             throw new InvalidOperationException(b is null ? "No structures to demolish." : "No eligible footprints in this area.");
+        if (b is null && edits.Any(edit => assemblyOrders.ContainsKey(edit.Index)))
+            throw new InvalidOperationException("Finish spacecraft assembly before demolishing the yard.");
         if (b is not null)
         {
             CheckBuild(b,edits.Count);
@@ -111,7 +114,9 @@ sealed partial class Colony
             ratedPowerUse = recipe.Power, outputs = recipe.Outputs,
             width = (int)Widths[index], height = (int)Heights[index],
             upgrade = level <= recipe.Upgrades.Length ? recipe.Upgrades[level - 1] : null,
-            weatherForecast = weatherForecasts.GetValueOrDefault(index)
+            weatherForecast = weatherForecasts.GetValueOrDefault(index),
+            assembly = assemblyOrders.GetValueOrDefault(index),
+            assemblyReady = recipe.SpaceRole == "assembly" && running && CanDock
         };
     }
 

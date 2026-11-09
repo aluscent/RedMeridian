@@ -4,6 +4,7 @@ namespace RedMeridian.Domain;
 
 sealed record Material(string Id, string Name, string Symbol, long Initial);
 sealed record Technology(string Id, string Name, long Points, string[] Requires);
+sealed record ShipType(string Id, string Name, int Payload, int FuelPercent, int BuildTicks, Dictionary<string,int> Cost);
 sealed record Deposit(string Id, string Name, int[] Buckets, string[] Colors);
 sealed record DepositOverride(int X, int Y, string Deposit);
 sealed record StarterTile(int X, int Y, int Building);
@@ -19,6 +20,8 @@ sealed record Building
     public Footprint Footprint { get; init; } = new();
     public MineUpgrade[] Upgrades { get; init; } = [];
     public string? Image { get; init; }
+    public Dictionary<string,string> EnvironmentImages { get; init; } = [];
+    public string Description { get; init; } = "";
     public int Id { get; init; }
     public string Name { get; init; } = "";
     public string Category { get; init; } = "";
@@ -51,6 +54,8 @@ sealed class GameRules
     public Material[] Materials { get; }
     public Technology[] Research { get; }
     public WorldRules World { get; }
+    public ShipType[] ShipTypes { get; }
+    public const string LegacyShipType = "cargo-shuttle";
 
     public GameRules(string folder)
     {
@@ -65,8 +70,15 @@ sealed class GameRules
         Research = Read<Technology[]>("research");
         World = Read<WorldRules>("world");
         Buildings = Read<Building[]>("buildings").OrderBy(b => b.Id).ToArray();
+        ShipTypes = Read<ShipType[]>("spacecraft");
 
         var materialIds = Unique(Materials.Select(m => m.Id), "material");
+        var shipIds = Unique(ShipTypes.Select(ship => ship.Id), "spacecraft");
+        Require(shipIds.Contains(LegacyShipType) && ShipTypes.All(ship => !string.IsNullOrWhiteSpace(ship.Name) &&
+            ship.Payload is > 0 and <= 10_000 && ship.FuelPercent is > 0 and <= 1_000 &&
+            ship.BuildTicks is > 0 and <= 100_000 && ship.Cost is not null && ship.Cost.Count > 0 &&
+            ship.Cost.All(item => materialIds.Contains(item.Key) && item.Value is > 0 and <= 100_000)),
+            "Invalid spacecraft catalog or missing legacy cargo shuttle.");
         var metricIds = Unique(World.Metrics.Select(m => m.Id), "metric");
         var depositIds = Unique(World.Deposits.Select(d => d.Id), "deposit");
         Unique(Research.Select(t => t.Id), "research");
@@ -130,8 +142,11 @@ sealed class GameRules
                 b.Upgrades.All(u => u.Multiplier is >= 2 and <= 10 && Amounts(u.Cost,materialIds) &&
                     u.ExtraPower is >= 0 and <= 1000 && u.ExtraCrew is >= 0 and <= 1000),
                 $"Invalid footprint or upgrades for {b.Name}.");
-            Require(b.Image is null || System.Text.RegularExpressions.Regex.IsMatch(b.Image,
-                @"^assets/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+[.]png$"), $"Invalid PNG path for {b.Name}.");
+            static bool ImagePath(string? path) => path is not null && System.Text.RegularExpressions.Regex.IsMatch(path,
+                @"^assets/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+[.]png$");
+            Require((b.Image is null || ImagePath(b.Image)) && b.EnvironmentImages is not null &&
+                b.EnvironmentImages.All(item => item.Key is "planet" or "orbit" or "asteroid" && ImagePath(item.Value)),
+                $"Invalid PNG path for {b.Name}.");
             Require(b.SpaceRole is null or "relay" or "assembly" or "terminal" or "dock",
                 $"Unknown space role for {b.Name}.");
             Require((b.StormGeneration is null || b.Generation > 0) &&
@@ -190,4 +205,6 @@ sealed class GameRules
     }
 
     public Technology Technology(string id) => technologies[id];
+    public ShipType ShipType(string? id) => ShipTypes.FirstOrDefault(ship => ship.Id == id)
+        ?? throw new InvalidOperationException("Select a valid spacecraft type.");
 }

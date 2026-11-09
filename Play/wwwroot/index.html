@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Red Meridian — Mars Colony</title>
-<link rel="stylesheet" href="styles.css?v=map-8">
+<link rel="stylesheet" href="styles.css?v=map-9">
 <script defer src="sprites.js?v=map-5"></script>
 <script defer src="editor.js?v=map-4"></script>
-<script defer src="logistics.js?v=map-7"></script>
-<script defer src="game.js?v=map-8"></script>
+<script defer src="logistics.js?v=map-9"></script>
+<script defer src="game.js?v=map-9"></script>
 </head>
 <body>
 <header>
@@ -43,25 +43,31 @@
   </div>
 </section>
 <main>
-  <section id="stats" aria-label="Colony resources"></section>
   <div class="layout">
     <div class="stack">
       <section class="map" aria-label="Colony map">
         <div class="bar"><div><span class="label" id="world">Landing sector</span> <span id="clock"></span></div><div class="controls"><button id="home">Center</button><button id="out" aria-label="Zoom out">−</button><button id="in" aria-label="Zoom in">+</button></div></div>
         <div class="bar"><button id="openLogistics" aria-controls="logistics" aria-expanded="false">Space travel</button></div>
+        <section id="stats" aria-label="Colony resources"></section>
         <div class="viewport">
           <canvas id="map" tabindex="0" aria-label="Isometric colony map. Arrow keys move the cursor. Enter inspects or builds."></canvas>
           <details class="legend"><summary>Deposits</summary><div id="deposits"></div></details>
           <section id="buildingInfo" class="building-info" aria-label="Selected building" hidden>
             <div class="bar"><strong id="infoName"></strong><button id="closeInfo" aria-label="Close inspection">×</button></div>
+            <p id="infoDescription"></p>
             <div id="infoDetails"></div>
+            <form id="shipAssembly" hidden>
+              <label>Spacecraft <select id="shipType"></select></label>
+              <small id="assemblyStatus"></small>
+              <button id="beginAssembly" type="submit">Start assembly</button>
+            </form>
             <div class="controls"><button id="toggleBuilding"></button><button id="upgradeBuilding" hidden></button></div>
           </section>
           <div id="weather" hidden>Dust storm · reduced solar output</div>
         </div>
         <div class="bar map-bottom"><span id="inspect">Select a tile to inspect it.</span><span id="notice" role="status"></span></div>
       </section>
-      <section class="planet" aria-label="Terraforming progress"><div class="bar"><span class="label">Planetary engineering</span><span id="mission">Research climate infrastructure</span></div><div id="metrics"></div></section>
+      <section class="planet" id="engineering" aria-label="Terraforming progress"><div class="bar"><span class="label">Planetary engineering</span><span id="mission">Research climate infrastructure</span></div><div id="metrics"></div></section>
       <section class="planet"><details class="research"><summary class="label">Research milestones</summary><div id="research"></div></details></section>
       <section class="planet" aria-label="Space logistics">
         <details class="research" id="logistics">
@@ -71,7 +77,6 @@
             <label>View base <select id="baseSelect"></select></label>
             <div class="logistics-table"><table><thead id="baseHead"></thead><tbody id="baseStock"></tbody></table></div>
             <p id="spaceFacilities"></p>
-            <button type="button" id="assembleShip">Assemble spacecraft</button>
             <form id="dispatchShip">
               <label>Local spacecraft <select id="shipSelect" required></select></label>
               <label>Destination <select id="destination" required></select></label>
