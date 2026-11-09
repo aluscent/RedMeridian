@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 var rules = new GameRules(Path.Combine(AppContext.BaseDirectory, "Config"));
 (string Name, Action Run)[] tests =
 [
+    ("New planet bounds vary and old colonies preserve full maps", PlanetBounds),
     ("Battery charge, discharge and capacity limits", BatteryLimits),
     ("Footprint ownership and map boundaries", FootprintOwnership),
     ("Area build rejects unaffordable orders without partial edits", AreaBuildIsAtomic),
@@ -68,6 +69,28 @@ void FootprintOwnership()
     surface.Clear(0);
     Equal(-1, surface.AnchorAt(Colony.Size + 1));
     Equal(true, surface.Open(1, shape));
+}
+
+void PlanetBounds()
+{
+    var mars = rules.NewSite(ColonySite.Mars);
+    var venus = rules.NewSite(ColonySite.All.Single(site => site.Id == "venus"));
+    Equal(10_000, mars.Width * mars.Height);
+    Equal(13_440, venus.Width * venus.Height);
+    var colony = new Colony(rules, site: mars);
+    int last = (mars.Top + mars.Height - 1) * Colony.Size + mars.Left + mars.Width - 1;
+    var solar = rules.Buildings.Single(building => building.Art == "solar");
+    colony.Build(last, solar.Id);
+    Reject(() => colony.Build(last + 1, solar.Id));
+    var restored = Colony.Restore(rules, colony.Export());
+    Equal(mars.Width, restored.Site.Width);
+    Equal((byte)solar.Id, restored.Grid[last]);
+
+    var oldColony = new Colony(rules);
+    oldColony.Build(0, solar.Id);
+    var oldRestored = Colony.Restore(rules, oldColony.Export());
+    Equal(Colony.Size, oldRestored.Site.Width);
+    Equal((byte)solar.Id, oldRestored.Grid[0]);
 }
 
 void AreaBuildIsAtomic()

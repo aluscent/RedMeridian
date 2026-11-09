@@ -7,7 +7,7 @@ sealed record ColonySite(string Id, string Name, string Kind, int Width, int See
     public int Height => Length ?? Width;
     public int Left => (Colony.Size - Width) / 2;
     public int Top => (Colony.Size - Height) / 2;
-    public bool PlanetaryEngineering => Kind == "mars";
+    public bool PlanetaryEngineering => Kind is "mars" or "planet";
     public string[]? Deposits => Kind switch
     {
         "orbit" => [],
@@ -20,6 +20,7 @@ sealed record ColonySite(string Id, string Name, string Kind, int Width, int See
     public static readonly ColonySite[] All =
     [
         Mars,
+        new("venus", "Venus Survey Outpost", "planet", 112, 92431, 100, 2, 120),
         new("mars-orbit-1", "Mars Orbit · Slot 1", "orbit", 5, 1, 0, 1, 150),
         new("mars-orbit-2", "Mars Orbit · Slot 2", "orbit", 5, 2, 0, 1, 150),
         new("ceres", "Ceres Mining Outpost", "asteroid", 32, 3107, 180, 3),

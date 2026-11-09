@@ -30,7 +30,9 @@ function createMapEditor(catalog, deposits, geology, start) {
     const {width,height}=catalog.buildings[building-1].footprint;
     for(let dy=0;dy<height;dy++) for(let dx=0;dx<width;dx++) starter.add((y+dy)*1024+x+dx);
   }
-  let originX=496,originY=500, paint={}, editing=false, pointer;
+  const {left,top,width,height}=catalog.landingSite;
+  const homeX=left+Math.floor((width-cols)/2), homeY=top+Math.floor((height-rows)/2);
+  let originX=homeX,originY=homeY, paint={}, editing=false, pointer;
   const abundance=el("abundance");
   const seed=el("seed");
   const brush=el("brush");
@@ -99,12 +101,12 @@ function createMapEditor(catalog, deposits, geology, start) {
   document.querySelectorAll("[data-pan]").forEach(button=>{
     button.onclick=()=>{
       const [dx,dy]=button.dataset.pan.split(",").map(Number);
-      originX=Math.max(0,Math.min(1024-cols,originX+dx));
-      originY=Math.max(0,Math.min(1024-rows,originY+dy));
+      originX=Math.max(left,Math.min(left+width-cols,originX+dx));
+      originY=Math.max(top,Math.min(top+height-rows,originY+dy));
       draw();
     };
   });
-  el("previewHome").onclick=()=>{originX=496;originY=500;draw();};
+  el("previewHome").onclick=()=>{originX=homeX;originY=homeY;draw();};
   el("startNew").onclick=()=>{
     if(!seed.checkValidity()) {seed.reportValidity();return;}
     start(model());

@@ -85,7 +85,7 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
     static (int Fuel, int Ticks) Leg(ColonySite from, ColonySite to)
     {
         int distance = Math.Max(1, Math.Abs(from.Distance - to.Distance));
-        int lift = from.Kind is "mars" or "moon" ? (distance > 1 ? 8 : 4) : 0;
+        int lift = from.PlanetaryEngineering || from.Kind == "moon" ? (distance > 1 ? 8 : 4) : 0;
         return (2 + lift + distance * 2, 2 + distance * 4);
     }
     static int FuelFor(int baseFuel, ShipType type) => (baseFuel * type.FuelPercent + 99) / 100;
@@ -93,7 +93,8 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
     public object Summary() => new
     {
         tick = mars.Tick, foundingAlloy = FoundingAlloy,
-        sites = ColonySite.All, bases = bases.Values.Select(colony => colony.LogisticsSummary()).ToArray(),
+        sites = ColonySite.All.Select(site => bases.TryGetValue(site.Id,out var colony) ? colony.Site : rules.NewSite(site)).ToArray(),
+        bases = bases.Values.Select(colony => colony.LogisticsSummary()).ToArray(),
         ships = ships.Select(ship => new
         {
             ship.Id, ship.Type, ship.Location, ship.Destination, ship.ArrivalTick, ship.Cargo, ship.Founding,
@@ -209,6 +210,7 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
 
     Colony Found(ColonySite site)
     {
+        site = rules.NewSite(site);
         int BuildingId(string role) => rules.Buildings.Single(b => b.SpaceRole == role).Id;
         int center = 511 * Colony.Size + 511;
         int solar = rules.Buildings.First(b => b.Art == "solar").Id;
@@ -217,7 +219,8 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
         var stock = rules.Materials.ToDictionary(m => m.Id, _ => 0L);
         var colony = Colony.Restore(rules, new(4, [[center, solar], [center+1, habitat],
             [center+Colony.Size, dock], [center+Colony.Size+1, BuildingId("relay")]], null, 2, mars.Tick, null,
-            stock, new(), Map: new(site.Seed, site.Abundance), ActivatedResearch: [], LongOrbit: site.Kind == "orbit"), site);
+            stock, new(), Map: new(site.Seed, site.Abundance), ActivatedResearch: [], LongOrbit: site.Kind == "orbit",
+            PlanetBounds: site.PlanetaryEngineering ? new(site.Width,site.Height) : null), site);
         mars.ShareResearchWith(colony);
         return colony;
     }

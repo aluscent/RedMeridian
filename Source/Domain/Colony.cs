@@ -6,7 +6,8 @@ record SaveData(int Version, int[][]? Tiles, long[]? Stock, int Population, long
     Dictionary<string,long>? Materials = null, Dictionary<string,int>? Metrics = null, long Charge = 0,
     MapSettings? Map = null, SavedStructure[]? Structures = null,
     Dictionary<int,WeatherForecast>? WeatherForecasts = null, SpaceSave? Space = null,
-    string[]? ActivatedResearch = null, bool LongOrbit = false, AssemblyOrder[]? Assembly = null);
+    string[]? ActivatedResearch = null, bool LongOrbit = false, AssemblyOrder[]? Assembly = null,
+    PlanetSize? PlanetBounds = null);
 
 
 sealed partial class Colony

@@ -1,6 +1,16 @@
 "use strict";
 
 let logistics, cargoInputs;
+const baseRows=new Map(), fleetRows=new Map();
+
+function pruneRows(rows,ids) {
+  const keep=new Set(ids);
+  for(const [id,row] of rows) {
+    if(keep.has(id)) continue;
+    row.remove();
+    rows.delete(id);
+  }
+}
 
 function setOptions(select, entries) {
   const previous=select.value;
@@ -12,6 +22,13 @@ function setOptions(select, entries) {
 
 function initializeLogistics() {
   cargoInputs=new Map();
+  const header=document.createElement("tr");
+  for(const name of ["Base",...catalog.materials.map(material=>material.name),"Life support runway"]) {
+    const cell=document.createElement("th");
+    cell.textContent=name;
+    header.append(cell);
+  }
+  $("baseHead").append(header);
   for(const material of catalog.materials.filter(m=>m.id!==catalog.world.researchMaterial)) {
     const label=document.createElement("label"), input=document.createElement("input");
     input.type="number";
@@ -60,13 +77,13 @@ function renderFlightQuote() {
   if(leg) required.propellant=(required.propellant||0)+fuel;
   if(founding) required.alloy=(required.alloy||0)+logistics.foundingAlloy;
   const short=local && Object.entries(required).some(([id,amount])=>local.stock[id]<amount);
-  $("launchShip").disabled=!leg || !type || recurring || short || units>type.payload || !local?.dock || !local.relay;
-  $("setRoute").disabled=!ship || !leg || founding;
-  $("flightQuote").textContent=leg && type
+  setProperty($("launchShip"),"disabled",Boolean(!leg || !type || recurring || short || units>type.payload || !local?.dock || !local.relay));
+  setProperty($("setRoute"),"disabled",Boolean(!ship || !leg || founding));
+  setText($("flightQuote"),leg && type
     ? units+"/"+type.payload+" cargo · "+fuel+" fuel · "+leg.ticks+" ticks"
       +(founding?" · "+logistics.foundingAlloy+" alloy founding kit":"")
       +(short?" · insufficient stock":"")+(recurring?" · recurring route assigned":"")
-    : "Choose an idle spacecraft and a destination. Build spacecraft from the assembly yard inspector.";
+    : "Choose an idle spacecraft and a destination. Build spacecraft from the assembly yard inspector.");
 }
 
 async function refreshLogistics() {
@@ -81,52 +98,53 @@ async function refreshLogistics() {
   const local=bases.find(base=>base.id===state.site.id);
   if(!local) return;
   setOptions($("baseSelect"),bases.map(base=>[base.id,names.get(base.id)]));
-  $("baseSelect").value=state.site.id;
+  setProperty($("baseSelect"),"value",state.site.id);
   setOptions($("destination"),logistics.sites.filter(site=>site.id!==local.id)
     .map(site=>[site.id,names.get(site.id)+(bases.some(base=>base.id===site.id)?"":" (found base)")]));
   setOptions($("shipSelect"),logistics.ships.filter(ship=>ship.location===local.id && !ship.destination)
     .map(ship=>[ship.id,catalog.shipTypes.find(type=>type.id===ship.type).name+" #"+ship.id]));
 
-  function row(tag,values) {
-    const row=document.createElement("tr");
-    for(const value of values) {
-      const cell=document.createElement(tag);
-      cell.textContent=value;
-      row.append(cell);
-    }
-    return row;
+  pruneRows(baseRows,bases.map(base=>base.id));
+  for(const base of bases) {
+    const values=[names.get(base.id),...catalog.materials.map(material=>{
+      const delta=base.delta[material.id];
+      return number.format(base.stock[material.id])+" ("+(delta>=0?"+":"")+delta+"/tick)";
+    }),Object.entries(base.reserves).map(([id,ticks])=>id+": "+(ticks===null?"stable":ticks+" ticks")).join(", ")];
+    let row=baseRows.get(base.id);
+    if(!row) {
+      row=document.createElement("tr");
+      for(const value of values) row.insertCell().textContent=value;
+      baseRows.set(base.id,row);
+      $("baseStock").append(row);
+    } else values.forEach((value,i)=>setText(row.cells[i],value));
   }
-  $("baseHead").replaceChildren(row("th",["Base",...catalog.materials.map(m=>m.name),"Life support runway"]));
-  $("baseStock").replaceChildren(...bases.map(base=>row("td",[
-    names.get(base.id),...catalog.materials.map(m=>{
-      const delta=base.delta[m.id];
-      return number.format(base.stock[m.id])+" ("+(delta>=0?"+":"")+delta+"/tick)";
-    }),Object.entries(base.reserves).map(([id,ticks])=>id+": "+(ticks===null?"stable":ticks+" ticks")).join(", ")
-  ])));
   const orbitalResearch=Math.max(0,...bases.filter(base=>logistics.sites.some(site=>site.id===base.id && site.kind==="orbit"))
     .map(base=>base.stock[catalog.world.researchMaterial]));
-  $("spaceFacilities").textContent="Local facilities · assembly "+(local.assembly?"online":"offline")+
+  setText($("spaceFacilities"),"Local facilities · assembly "+(local.assembly?"online":"offline")+
     " · cargo "+(local.dock?"online":"offline")+" · relay "+(local.relay?"online":"offline")+
-    (orbitalResearch>=30?" · Orbital research objective complete":" · Orbital research objective: "+orbitalResearch+"/30 RP");
-  const fleet=$("fleet");
-  fleet.replaceChildren(...logistics.ships.map(ship=>{
-    const item=document.createElement("li");
+    (orbitalResearch>=30?" · Orbital research objective complete":" · Orbital research objective: "+orbitalResearch+"/30 RP"));
+  pruneRows(fleetRows,logistics.ships.map(ship=>ship.id));
+  for(const ship of logistics.ships) {
+    let item=fleetRows.get(ship.id);
+    if(!item) {
+      item=document.createElement("li");
+      const label=document.createElement("span"), clear=document.createElement("button");
+      clear.type="button";
+      clear.textContent="Clear route";
+      clear.onclick=()=>command("clear-route",{ship:ship.id});
+      item.append(label,clear);
+      fleetRows.set(ship.id,item);
+      $("fleet").append(item);
+    }
     const flight=ship.destination
       ? names.get(ship.location)+" → "+names.get(ship.destination)+" · "+
         (ship.waiting?"Waiting for an operating dock or storage space":"ETA "+Math.max(0,ship.arrivalTick-logistics.tick)+" ticks")+
         " · "+(formatAmounts(ship.cargo || {}) || "empty")
       : "Docked at "+names.get(ship.location);
-    item.textContent=catalog.shipTypes.find(type=>type.id===ship.type).name+" #"+ship.id+" · "+flight;
     const route=logistics.routes.find(route=>route.ship===ship.id);
-    if(route) {
-      item.append(" · Recurring "+route.material+" · "+names.get(route.source)+" → "+names.get(route.destination)+" ");
-      const clear=document.createElement("button");
-      clear.type="button";
-      clear.textContent="Clear route";
-      clear.onclick=()=>command("clear-route",{ship:ship.id});
-      item.append(clear);
-    }
-    return item;
-  }));
+    const description=route?" · Recurring "+route.material+" · "+names.get(route.source)+" → "+names.get(route.destination)+" ":"";
+    setText(item.firstElementChild,catalog.shipTypes.find(type=>type.id===ship.type).name+" #"+ship.id+" · "+flight+description);
+    setProperty(item.lastElementChild,"hidden",!route);
+  }
   renderFlightQuote();
 }

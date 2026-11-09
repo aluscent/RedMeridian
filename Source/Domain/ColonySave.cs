@@ -9,8 +9,10 @@ sealed partial class Colony
     {
         var tiles = new List<int[]>(counts.Sum());
         var structures = new List<SavedStructure>();
-        for (int index = 0; index < Grid.Length; index++)
+        for (int y = Site.Top; y < Site.Top + Site.Height; y++)
+        for (int x = Site.Left; x < Site.Left + Site.Width; x++)
         {
+            int index = y * Size + x;
             if (Grid[index] == 0) continue;
             tiles.Add([index,Grid[index]]);
             int level = Level(index);
@@ -20,7 +22,8 @@ sealed partial class Colony
         }
         return new(4,tiles.ToArray(),null,population,tick,null,new(stock),new(planet),power.Charge,MapSettings,structures.ToArray(),
             weatherForecasts.Count == 0 ? null : new(weatherForecasts), ActivatedResearch: activatedResearch.ToArray(),
-            LongOrbit: Site.Kind == "orbit" && Site.Height == 150, Assembly: assemblyOrders.Values.ToArray());
+            LongOrbit: Site.Kind == "orbit" && Site.Height == 150, Assembly: assemblyOrders.Values.ToArray(),
+            PlanetBounds: Site.PlanetaryEngineering && Site.Width != Size ? new(Site.Width,Site.Height) : null);
     }
 
     public static Colony Restore(GameRules rules,SaveData? save,ColonySite? site = null)
@@ -30,6 +33,13 @@ sealed partial class Colony
             save.Tick is < 0 or >= long.MaxValue || save.Charge < 0)
             throw new InvalidOperationException("Invalid colony save.");
         if (site?.Kind == "orbit" && !save.LongOrbit) site = site with { Width = 16, Length = null };
+        if (save.PlanetBounds is { } bounds)
+        {
+            site ??= ColonySite.Mars;
+            if (!site.PlanetaryEngineering || !bounds.Valid)
+                throw new InvalidOperationException("Invalid saved planet size.");
+            site = site with { Width = bounds.Width, Length = bounds.Height };
+        }
         var colony = new Colony(rules,map: save.Version == 4 ? save.Map : null,empty: true,site: site)
             { population = save.Population, tick = save.Tick };
         var structures = new Dictionary<int,SavedStructure>();

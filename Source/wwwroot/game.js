@@ -5,7 +5,7 @@ const canvas = $("map"), ctx = canvas.getContext("2d", {alpha:false});
 const size = 1024, number = new Intl.NumberFormat();
 let catalog, stats, metrics, techCards, tileSprites, buildingSprites, masks, geology;
 let surfaceSettings={seed:0,abundance:100,paint:{}}, surfaceRevision=-1;
-let widths, heights, owners;
+let widths, heights, owners, mapSite, mapWorldRevision=-1;
 const environmentSprites=new Map();
 let spriteEnvironment="planet";
 
@@ -35,6 +35,7 @@ let areaMode = false, anchor;
 let drawnBuildings = [];
 let cx = 511, cy = 511, scale = 1.03, width = 0, height = 0, dpr = 1;
 let dirty = true, animation = 0, sweepStart, priorFrame, visible = 0;
+let nextDrawReport=0;
 const drawTimes = [], frameTimes = [];
 
 function requestDraw() {
@@ -89,13 +90,13 @@ function deposit(index) {
   const allowed=state.site.deposits;
   return allowed===null || allowed?.includes(deposit?.id) ? deposit : null;
 }
-function footprint(x,y,w,h,color,stroke) {
-  Sprites.polygon(ctx,[screen(x,y),screen(x+w,y),screen(x+w,y+h),screen(x,y+h)],color,stroke);
+function footprint(x,y,w,h,color,stroke,target=ctx) {
+  Sprites.polygon(target,[screen(x,y),screen(x+w,y),screen(x+w,y+h),screen(x,y+h)],color,stroke);
 }
 function blocked(x,y,recipe) {
   const {width:w,height:h}=recipe.footprint;
   if(!inside([x+w-1,y+h-1]) || (recipe.deposit && deposit(y*size+x)?.id!==recipe.deposit)) return true;
-  for(let dy=0;dy<h;dy++) for(let dx=0;dx<w;dx++) if(owners[(y+dy)*size+x+dx]) return true;
+  for(let dy=0;dy<h;dy++) for(let dx=0;dx<w;dx++) if(owners[mapOffset(x+dx,y+dy)]) return true;
   return false;
 }
 function terrainShade(x,y) {
@@ -103,45 +104,108 @@ function terrainShade(x,y) {
   const ridge = Math.sin(x*.17+y*.10)+Math.sin(y*.21-x*.08);
   return Math.min(7,Math.max(0, Math.floor(4+ridge*1.5+(grain>>>28)/7-1)));
 }
-function diamond(px,py,color,stroke) {
-  const a=48*scale,b=24*scale;
-  Sprites.polygon(ctx,[[px,py],[px+a,py+b],[px,py+b*2],[px-a,py+b]],color,stroke);
+const terrainChunks=new Map();
+const chunkSize=12, terrainBudget=48*1024*1024;
+let terrainBytes=0;
+
+function resetTerrainCache() {
+  terrainChunks.clear();
+  terrainBytes=0;
 }
-function draw() {
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.fillStyle=state?.site.kind==="orbit" ? "#101420" : "#38251d";
-  ctx.fillRect(0,0,width,height);
-  if(!grid) return;
+
+function terrainChunk(left,top,right,bottom,raster) {
+  const key=left+","+top+","+raster;
+  let chunk=terrainChunks.get(key);
+  if(chunk) {
+    terrainChunks.delete(key);
+    terrainChunks.set(key,chunk);
+    return chunk;
+  }
+  const cols=right-left, rows=bottom-top;
+  const image=document.createElement("canvas");
+  image.width=Math.ceil(((cols+rows)*48+2)*raster);
+  image.height=Math.ceil(((cols+rows)*24+2)*raster);
+  const g=image.getContext("2d");
+  const offset=rows*48+1;
+  g.setTransform(raster,0,0,raster,0,0);
+  for(let diagonal=0;diagonal<cols+rows-1;diagonal++) {
+    for(let x=Math.max(0,diagonal-rows+1);x<=Math.min(cols-1,diagonal);x++) {
+      const y=diagonal-x, px=offset+(x-y)*48, py=diagonal*24;
+      const shade=terrainShade(left+x,top+y);
+      if(mapSite.kind==="orbit")
+        Sprites.polygon(g,[[px,py],[px+48,py+24],[px,py+48],[px-48,py+24]],
+          shade%2?"#2e394a":"#344153","#53647b");
+      else {
+        const ore=deposit((top+y)*size+left+x);
+        g.drawImage(tileSprites[shade+(ore?ore.index*8:0)],px-49,py);
+      }
+    }
+  }
+  const bytes=image.width*image.height*4;
+  while(terrainBytes+bytes>terrainBudget && terrainChunks.size) {
+    const oldest=terrainChunks.keys().next().value;
+    terrainBytes-=terrainChunks.get(oldest).bytes;
+    terrainChunks.delete(oldest);
+  }
+  chunk={image,bytes};
+  terrainChunks.set(key,chunk);
+  terrainBytes+=bytes;
+  return chunk;
+}
+
+function drawTerrain(g,x0,y0,x1,y1) {
+  const {left,top,width:cols,height:rows}=mapSite;
+  const raster=2**Math.max(-2,Math.min(0,Math.round(Math.log2(scale*dpr))));
+  const firstX=Math.floor((x0-left)/chunkSize), lastX=Math.floor((x1-left)/chunkSize);
+  const firstY=Math.floor((y0-top)/chunkSize), lastY=Math.floor((y1-top)/chunkSize);
+  for(let diagonal=firstX+firstY;diagonal<=lastX+lastY;diagonal++) {
+    for(let x=Math.max(firstX,diagonal-lastY);x<=Math.min(lastX,diagonal-firstY);x++) {
+      const a=left+x*chunkSize, b=top+(diagonal-x)*chunkSize;
+      const right=Math.min(a+chunkSize,left+cols), bottom=Math.min(b+chunkSize,top+rows);
+      const [px,py]=screen(a,b), drawX=px-((bottom-b)*48+1)*scale;
+      if(drawX>=width || drawX+((right-a+bottom-b)*48+2)*scale<=0 ||
+         py>=height || py+((right-a+bottom-b)*24+2)*scale<=0) continue;
+      const {image}=terrainChunk(a,b,right,bottom,raster);
+      g.drawImage(image,drawX,py,image.width/raster*scale,image.height/raster*scale);
+    }
+  }
+}
+
+const groundLayer=document.createElement("canvas");
+const buildingLayer=document.createElement("canvas");
+let sceneKey;
+function rebuildScene(water) {
+  for(const layer of [groundLayer,buildingLayer]) {
+    if(layer.width!==canvas.width) layer.width=canvas.width;
+    if(layer.height!==canvas.height) layer.height=canvas.height;
+  }
+  const ground=groundLayer.getContext("2d",{alpha:false}), structures=buildingLayer.getContext("2d");
+  for(const g of [ground,structures]) g.setTransform(dpr,0,0,dpr,0,0);
+  ground.fillStyle=mapSite.kind==="orbit"?"#101420":"#38251d";
+  ground.fillRect(0,0,width,height);
+  structures.clearRect(0,0,width,height);
 
   const pad=225*scale;
-  const corners=[world(-pad,-pad),world(width+pad,-pad),
-    world(-pad,height+pad),world(width+pad,height+pad)];
-  const {left,top,width:spanX,height:spanY}=state.site;
+  const corners=[world(-pad,-pad),world(width+pad,-pad),world(-pad,height+pad),world(width+pad,height+pad)];
+  const {left,top,width:spanX,height:spanY}=mapSite;
   const x0=Math.max(left,Math.floor(Math.min(...corners.map(p=>p[0]))));
   const x1=Math.min(left+spanX-1,Math.ceil(Math.max(...corners.map(p=>p[0]))));
   const y0=Math.max(top,Math.floor(Math.min(...corners.map(p=>p[1]))));
   const y1=Math.min(top+spanY-1,Math.ceil(Math.max(...corners.map(p=>p[1]))));
+  drawTerrain(ground,x0,y0,x1,y1);
   const buildings=[];
-  drawnBuildings=buildings;
-  visible=0;
+  const wetColor=water>=10?'rgba(47,119,135,'+Math.min(.75,.22+water/160)+')':null;
   for(let diagonal=x0+y0;diagonal<=x1+y1;diagonal++) {
     for(let x=Math.max(x0,diagonal-y1);x<=Math.min(x1,diagonal-y0);x++) {
-      const y=diagonal-x, [px,py]=screen(x,y);
-      if(px < -pad || px > width+pad || py < -pad || py > height+pad) continue;
-      const index=y*size+x, type=grid[index];
-      const shade=terrainShade(x,y), ore=deposit(index);
-      if (px >= -50*scale && px <= width+50*scale && py < height && py+50*scale >= 0) {
-        if(state.site.kind==="orbit")
-          diamond(px,py,shade%2 ? "#2e394a" : "#344153","#53647b");
-        else
-          ctx.drawImage(tileSprites[shade+(ore ? ore.index*8 : 0)],px-49*scale,py,98*scale,50*scale);
-        if ((state.planet["surface-water"] || 0) >= 10 && !owners[index] && !ore && shade < 2) {
-          const wetness = Math.min(.75,.22+(state.planet["surface-water"] || 0)/160);
-          diamond(px,py,'rgba(47,119,135,'+wetness+')','#72a6a659');
-        }
+      const y=diagonal-x, cell=mapOffset(x,y), type=grid[cell];
+      if(wetColor && !owners[cell]) {
+        const [px,py]=screen(x,y), a=48*scale,b=24*scale;
+        if(px>=-50*scale && px<=width+50*scale && py<height && py+50*scale>=0 &&
+           terrainShade(x,y)<2 && !deposit(y*size+x))
+          Sprites.polygon(ground,[[px,py],[px+a,py+b],[px,py+b*2],[px-a,py+b]],wetColor,"#72a6a659");
       }
       if(type) {
-        const w=widths[index], h=heights[index];
+        const w=widths[cell], h=heights[cell];
         const [sx,sy]=screen(x+(w-1)/2,y+(h-1)/2);
         const spriteScale=scale*Math.max(w,h);
         if(sx+48*spriteScale>=0 && sx-48*spriteScale<width && sy+50*spriteScale>=0 && sy-50*spriteScale<height)
@@ -149,7 +213,18 @@ function draw() {
       }
     }
   }
-  const highlight=cursor || selected;
+  buildings.sort((a,b)=>a[8]-b[8] || a[3]-b[3]);
+  drawnBuildings=buildings;
+  visible=buildings.length;
+  for(const building of buildings) drawBuilding(structures,building);
+}
+
+function drawBuilding(target,[px,py,type,x,y,spriteScale,w,h]) {
+  if(w>1 || h>1) footprint(x,y,w,h,"#30252280","#bd916b",target);
+  target.drawImage(buildingSprites[type-1],px-48*spriteScale,py-50*spriteScale,96*spriteScale,100*spriteScale);
+}
+
+function drawHighlight(highlight) {
   if(anchor) {
     const [x,y]=cursor && inside(cursor)?cursor:anchor;
     const x0=Math.min(x,anchor[0]), y0=Math.min(y,anchor[1]);
@@ -161,19 +236,59 @@ function draw() {
     const [x,y]=highlight;
     const recipe=catalog.buildings[mode-1];
     const invalid=recipe && blocked(x,y,recipe);
-    const owner=owners[y*size+x]-1;
+    const owner=owners[mapOffset(x,y)]-1;
     if(recipe) footprint(x,y,recipe.footprint.width,recipe.footprint.height,invalid?"#fb77554c":"#ffdfa941",invalid?"#ff9c81":"#ffd09e");
     else if(owner<0) footprint(x,y,1,1,"#ffdfa941","#ffd09e");
-    else footprint(owner%size,Math.floor(owner/size),widths[owner],heights[owner],"#ffdfa941","#ffd09e");
+    else {
+      const cell=offsetOfIndex(owner);
+      footprint(owner%size,Math.floor(owner/size),widths[cell],heights[cell],"#ffdfa941","#ffd09e");
+    }
   }
-  buildings.sort((a,b)=>a[8]-b[8] || a[3]-b[3]);
-  const selectedOwner=highlight && inside(highlight) ? owners[highlight[1]*size+highlight[0]]-1 : -1;
-  for(const [px,py,type,x,y,spriteScale,w,h] of buildings) {
-    if(w>1 || h>1) footprint(x,y,w,h,"#30252280","#bd916b");
-    ctx.drawImage(buildingSprites[type-1],px-48*spriteScale,py-50*spriteScale,96*spriteScale,100*spriteScale);
+}
 
-    if(!anchor && selectedOwner===y*size+x && mode<=0) footprint(x,y,w,h,"#ffffff00","#ffd09e");
-    visible++;
+function draw() {
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  if(!grid || mapWorldRevision!==state?.worldRevision) {
+    ctx.fillStyle="#38251d";
+    ctx.fillRect(0,0,width,height);
+    drawnBuildings=[];
+    visible=0;
+    return;
+  }
+  const water=state.planet["surface-water"] || 0;
+  const key=[mapWorldRevision,mapRevision,cx,cy,scale,width,height,dpr,water].join(",");
+  if(key!==sceneKey) {
+    rebuildScene(water);
+    sceneKey=key;
+  }
+
+  const highlight=cursor || selected;
+  ctx.drawImage(groundLayer,0,0,width,height);
+  drawHighlight(highlight);
+  ctx.drawImage(buildingLayer,0,0,width,height);
+  const owner=!anchor && mode<=0 && highlight && inside(highlight) ? owners[mapOffset(...highlight)]-1 : -1;
+  const active=owner>=0 && drawnBuildings.find(building=>building[4]*size+building[3]===owner);
+  if(active) {
+    // Replay just the outline's clip to preserve which sprites cover it.
+    const [, , ,x,y, ,w,h]=active;
+    const corners=[screen(x,y),screen(x+w,y),screen(x+w,y+h),screen(x,y+h)];
+    const x0=corners[3][0]-2, x1=corners[1][0]+2;
+    const y0=corners[0][1]-2, y1=corners[2][1]+2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0,y0,x1-x0,y1-y0);
+    ctx.clip();
+    ctx.drawImage(groundLayer,0,0,width,height);
+    drawHighlight(highlight);
+    for(const building of drawnBuildings) {
+      const [px,py, , , ,s,bw,bh]=building;
+      // Multi-tile platforms can extend below their sprites.
+      const bottom=Math.max(50*s,(bw+bh+2)*12*scale);
+      if(px+48*s+2<x0 || px-48*s-2>x1 || py+bottom+2<y0 || py-50*s-2>y1) continue;
+      drawBuilding(ctx,building);
+      if(building===active) footprint(x,y,w,h,"#ffffff00","#ffd09e");
+    }
+    ctx.restore();
   }
   if (state.storm) {
     ctx.fillStyle="#e9954033";
@@ -207,12 +322,18 @@ function frame(time) {
     }
   }
   if(dirty) {
-    const start=performance.now();
+    const measure=state?.developerMode;
+    const start=measure?performance.now():0;
     draw();
     placeInfo();
-    record(drawTimes,performance.now()-start);
-    $("draw").textContent=p95(drawTimes);
-    $("count").textContent=state?number.format(state.total)+" / "+number.format(visible):"—";
+    if(measure) {
+      record(drawTimes,performance.now()-start);
+      if(time>=nextDrawReport) {
+        setText($("draw"),p95(drawTimes));
+        setText($("count"),number.format(state.total)+" / "+number.format(visible));
+        nextDrawReport=time+250;
+      }
+    }
     dirty=false;
   }
 }
@@ -289,11 +410,21 @@ function populateMenu() {
   };
   chooseMode(0);
 }
+function setText(element,value) {
+  if(element.textContent!==value) element.textContent=value;
+}
+function setAttribute(element,name,value) {
+  if(element.getAttribute(name)!==value) element.setAttribute(name,value);
+}
+function setProperty(element,name,value) {
+  if(element[name]!==value) element[name]=value;
+}
+
 function display(next) {
   const redraw=!state || state.storm!==next.storm || state.planet["surface-water"]!==next.planet["surface-water"];
   state=next;
   document.body.classList.toggle("playing",next.started);
-  $("loadSaved").disabled=!next.hasSave;
+  setProperty($("loadSaved"),"disabled",!next.hasSave);
   const entries=catalog.materials.map(m=>{
     const delta=next.delta[m.id];
     return [number.format(next.stock[m.id]),(delta>0?"+":"")+number.format(delta)+" / tick",delta];
@@ -305,17 +436,17 @@ function display(next) {
     [next.population+" / "+next.housing,next.crewUsed+" / "+next.crewCapacity+" crew slots"]
   );
   entries.forEach(([value,detail,delta],i)=>{
-    stats[i][1].textContent=value;
-    stats[i][2].textContent=detail;
-    stats[i][0].setAttribute("aria-label",stats[i][3]+" "+value);
-    stats[i][2].className=delta>0?"positive":delta<0?"negative":"";
+    setText(stats[i][1],value);
+    setText(stats[i][2],detail);
+    setAttribute(stats[i][0],"aria-label",stats[i][3]+" "+value);
+    setProperty(stats[i][2],"className",delta>0?"positive":delta<0?"negative":"");
   });
   catalog.world.metrics.forEach((metric,i)=>{
     const value=next.planet[metric.id];
-    metrics[i][1].textContent=(value/10).toFixed(1)+metric.unit+" / "+metric.target/10+metric.unit;
-    metrics[i][2].value=value-metric.initial;
+    setText(metrics[i][1],(value/10).toFixed(1)+metric.unit+" / "+metric.target/10+metric.unit);
+    setProperty(metrics[i][2],"value",value-metric.initial);
   });
-  $("engineering").hidden=!next.site.planetaryEngineering;
+  setProperty($("engineering"),"hidden",!next.site.planetaryEngineering);
   const unlocked=new Set(next.unlocked);
   const available=new Set(next.allowedBuildings);
   catalog.research.forEach((t,i)=>{
@@ -325,63 +456,78 @@ function display(next) {
     const points=next.stock[catalog.world.researchMaterial];
     const requirements=missing.map(id=>catalog.research.find(other=>other.id===id).name);
     card.classList.toggle("positive",active);
-    button.hidden=active;
-    button.disabled=points<t.points || missing.length>0;
-    detail.textContent=active?"Active":
+    setProperty(button,"hidden",active);
+    setProperty(button,"disabled",points<t.points || missing.length>0);
+    setText(detail,active?"Active":
       number.format(points)+" / "+number.format(t.points)+" RP"+
-      (requirements.length?" · Activate first: "+requirements.join(", "):"");
+      (requirements.length?" · Activate first: "+requirements.join(", "):""));
   });
   Array.from($("builds").children).forEach((button,i)=>{
     const id=catalog.buildings[i].research;
     const locked=Boolean(id && !unlocked.has(id));
-    button.disabled=!available.has(i+1);
+    setProperty(button,"disabled",!available.has(i+1));
     button.classList.toggle("locked",locked);
-    button.querySelector("strong").textContent=(locked?"🔒 ":"")+catalog.buildings[i].name;
+    setText(button.querySelector("strong"),(locked?"🔒 ":"")+catalog.buildings[i].name);
   });
-  $("pause").textContent=next.paused?"Resume":"Pause";
-  $("speed").textContent=next.speed+"× speed";
-  $("save").disabled=next.stress;
-  $("weather").hidden=!next.storm;
-  $("world").textContent=next.stress?"Benchmark sector":next.site.name;
-  $("clock").textContent="Sol "+(Math.floor(next.tick/24)+1)+" · "+String(next.tick%24).padStart(2,"0")+":00";
-  $("mission").textContent=next.complete?"Terraforming targets met":next.shortage?"Life support shortage":
-    next.unlocked.length===0?"Build a lab to unlock new facilities":"Research and terraforming underway";
-  $("tick").textContent=next.tickMs.toFixed(3)+" ms";
-  $("testerTools").hidden=!next.developerMode;
-  $("openLogistics").disabled=next.stress;
-  $("stress").textContent=next.stress?"Return to colony":"Load 100k stress map";
-  $("sweep").hidden=!next.stress;
+  setText($("pause"),next.paused?"Resume":"Pause");
+  setText($("speed"),next.speed+"× speed");
+  setProperty($("save"),"disabled",next.stress);
+  setProperty($("weather"),"hidden",!next.storm);
+  setText($("world"),next.stress?"Benchmark sector":next.site.name);
+  setText($("clock"),"Sol "+(Math.floor(next.tick/24)+1)+" · "+String(next.tick%24).padStart(2,"0")+":00");
+  setText($("mission"),next.complete?"Terraforming targets met":next.shortage?"Life support shortage":
+    next.unlocked.length===0?"Build a lab to unlock new facilities":"Research and terraforming underway");
+  setText($("tick"),next.tickMs.toFixed(3)+" ms");
+  setProperty($("testerTools"),"hidden",!next.developerMode);
+  setProperty($("openLogistics"),"disabled",next.stress);
+  setText($("stress"),next.stress?"Return to colony":"Load 100k stress map");
+  setProperty($("sweep"),"hidden",!next.stress);
   if(redraw) requestDraw();
 }
-function setOwner(index,w,h,owner) {
-  for(let y=0;y<h;y++) for(let x=0;x<w;x++) owners[index+y*size+x]=owner;
+function mapOffset(x,y) {
+  return (y-mapSite.top)*mapSite.width+x-mapSite.left;
+}
+const offsetOfIndex=index=>mapOffset(index%size,Math.floor(index/size));
+
+function setOwner(cell,w,h,owner) {
+  for(let y=0;y<h;y++) owners.fill(owner,cell+y*mapSite.width,cell+y*mapSite.width+w);
 }
 function applyTileEdit(edit) {
-  const index=edit.index;
-  if(grid[index]) setOwner(index,widths[index],heights[index],0);
-  grid[index]=edit.type;
-  widths[index]=edit.type?edit.width:0;
-  heights[index]=edit.type?edit.height:0;
-  if(edit.type) setOwner(index,edit.width,edit.height,index+1);
+  const cell=offsetOfIndex(edit.index);
+  if(grid[cell]) setOwner(cell,widths[cell],heights[cell],0);
+  grid[cell]=edit.type;
+  widths[cell]=edit.type?edit.width:0;
+  heights[cell]=edit.type?edit.height:0;
+  if(edit.type) setOwner(cell,edit.width,edit.height,edit.index+1);
 }
 async function syncMap() {
-  await useEnvironmentSprites(state.site.kind);
-  if(surfaceRevision!==state.worldRevision) {
-    const terrain=await fetch("/api/surface",{cache:"no-store"});
-    if(!terrain.ok) throw new Error("Could not load geology.");
-    surfaceSettings=await terrain.json();
-    surfaceRevision=state.worldRevision;
-  }
-  const response=await fetch("/api/map",{cache:"no-store"});
+  const site=state.site, revision=state.worldRevision;
+  const requests=[fetch("/api/map",{cache:"no-store"}),useEnvironmentSprites(site.kind)];
+  if(surfaceRevision!==revision) requests.push(fetch("/api/surface",{cache:"no-store"}));
+  const [response,,terrain]=await Promise.all(requests);
   if(!response.ok) throw new Error("Could not load the sector map.");
-  const cells=new Uint8Array(await response.arrayBuffer()), area=size*size;
+  if(Number(response.headers.get("X-World-Revision"))!==revision) throw new Error("Base changed during map load.");
+  const cells=new Uint8Array(await response.arrayBuffer()), area=site.width*site.height;
   if(cells.length!==area*3) throw new Error("Incomplete sector map.");
+  if(terrain) {
+    if(!terrain.ok) throw new Error("Could not load geology.");
+    if(Number(terrain.headers.get("X-World-Revision"))!==revision) throw new Error("Base changed during terrain load.");
+    surfaceSettings=await terrain.json();
+    surfaceRevision=revision;
+    resetTerrainCache();
+  }
+  mapSite=site;
   grid=cells.subarray(0,area);
   widths=cells.subarray(area,2*area);
   heights=cells.subarray(2*area);
   owners=new Uint32Array(area);
-  for(let index=0;index<area;index++) if(grid[index]) setOwner(index,widths[index],heights[index],index+1);
+  for(let cell=0;cell<area;cell++) if(grid[cell]) {
+    const x=site.left+cell%site.width, y=site.top+Math.floor(cell/site.width);
+    setOwner(cell,widths[cell],heights[cell],y*size+x+1);
+  }
   mapRevision=Number(response.headers.get("X-Map-Revision"));
+  mapWorldRevision=revision;
+  sceneKey=undefined;
   requestDraw();
 }
 function notice(message,error=false) {
@@ -402,7 +548,7 @@ async function command(action,extra={}) {
     const result=await response.json();
     if(!result.state) throw new Error(result.message || "Command failed.");
     display(result.state);
-    if(response.ok && grid && result.edits && result.state.revision===previous+1) {
+    if(response.ok && grid && mapWorldRevision===state.worldRevision && result.edits && result.state.revision===previous+1) {
       for(const edit of result.edits) applyTileEdit(edit);
       mapRevision=result.state.revision;
       requestDraw();
@@ -455,9 +601,9 @@ const inside=([x,y])=> {
   return x>=left && y>=top && x<left+width && y<top+height;
 };
 function inspectTile([x,y]) {
-  if(!grid || !inside([x,y])) return;
-  const index=y*size+x, owner=owners[index]-1, resource=deposit(index);
-  const recipe=owner>=0?catalog.buildings[grid[owner]-1]:null;
+  if(!grid || mapWorldRevision!==state.worldRevision || !inside([x,y])) return;
+  const index=y*size+x, owner=owners[mapOffset(x,y)]-1, resource=deposit(index);
+  const recipe=owner>=0?catalog.buildings[grid[offsetOfIndex(owner)]-1]:null;
   $("inspect").textContent=x+", "+y+"  ·  "+(recipe?.name || resource?.name ||
     (state.site.kind==="orbit" ? "Open station tile" : "Open regolith"));
 }
@@ -465,15 +611,16 @@ function placeInfo() {
   const box=$("buildingInfo");
   if(box.hidden || !state?.inspected) return;
   const index=state.inspected.index;
-  const [px,py]=screen(index%size+(widths[index]-1)/2,Math.floor(index/size)+(heights[index]-1)/2);
+  const cell=offsetOfIndex(index);
+  const [px,py]=screen(index%size+(widths[cell]-1)/2,Math.floor(index/size)+(heights[cell]-1)/2);
   const left=Math.min(width-box.offsetWidth-6,px+28);
   box.style.left=Math.max(6,left)+"px";
   box.style.top=Math.max(6,Math.min(height-box.offsetHeight-6,py-box.offsetHeight*.65))+"px";
 }
 function updateInfo(info) {
   const box=$("buildingInfo");
-  const tile=selected?selected[1]*size+selected[0]:-1;
-  if(!info || !state.started || mode!==0 || owners?.[tile]!==info.index+1) {box.hidden=true;return;}
+  const cell=selected && inside(selected) ? mapOffset(...selected) : -1;
+  if(!info || !state.started || mode!==0 || owners?.[cell]!==info.index+1) {box.hidden=true;return;}
   const recipe=catalog.buildings[info.type-1];
   $("infoDescription").textContent=recipe.description;
   const assembly=$("shipAssembly");
