@@ -4,10 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Red Meridian — Mars Colony</title>
-<link rel="stylesheet" href="styles.css?v=map-4">
+<link rel="stylesheet" href="styles.css?v=map-7">
 <script defer src="sprites.js?v=map-5"></script>
 <script defer src="editor.js?v=map-4"></script>
-<script defer src="game.js?v=map-5"></script>
+<script defer src="logistics.js?v=map-7"></script>
+<script defer src="game.js?v=map-7"></script>
 </head>
 <body>
 <header>
@@ -61,6 +62,31 @@
       </section>
       <section class="planet" aria-label="Terraforming progress"><div class="bar"><span class="label">Planetary engineering</span><span id="mission">Research climate infrastructure</span></div><div id="metrics"></div></section>
       <section class="planet"><details class="research"><summary class="label">Research milestones</summary><div id="research"></div></details></section>
+      <section class="planet" aria-label="Space logistics">
+        <details class="research" id="logistics">
+          <summary class="label">Space logistics</summary>
+          <div class="logistics">
+            <label>View base <select id="baseSelect"></select></label>
+            <div class="logistics-table"><table><thead id="baseHead"></thead><tbody id="baseStock"></tbody></table></div>
+            <p id="spaceFacilities"></p>
+            <button type="button" id="assembleShip">Assemble spacecraft</button>
+            <form id="dispatchShip">
+              <label>Local spacecraft <select id="shipSelect" required></select></label>
+              <label>Destination <select id="destination" required></select></label>
+              <fieldset><legend>Cargo units</legend><div id="cargoInputs"></div></fieldset>
+              <p id="flightQuote"></p>
+              <button type="submit" id="launchShip">Launch</button>
+            </form>
+            <form id="recurringRoute">
+              <label>Route material <select id="routeMaterial"></select></label>
+              <label>Keep at source <input id="routeReserve" type="number" min="0" max="2147483647" value="20" required></label>
+              <label>Target stock <input id="routeReorder" type="number" min="1" max="2147483647" value="20" required></label>
+              <button type="submit" id="setRoute">Schedule selected ship</button>
+            </form>
+            <h3>Fleet and incoming shipments</h3><ul id="fleet"></ul>
+          </div>
+        </details>
+      </section>
     </div>
     <aside>
       <div class="label">Surface operations</div>

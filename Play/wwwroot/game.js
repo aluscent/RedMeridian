@@ -66,8 +66,9 @@ function pick(x,y) {
   return groundAt(x,y);
 }
 function clampCamera() {
-  cx = Math.min(size-1, Math.max(0,cx));
-  cy = Math.min(size-1, Math.max(0,cy));
+  const edge=state?.site.edge ?? 0, end=size-edge-1;
+  cx = Math.min(end, Math.max(edge,cx));
+  cy = Math.min(end, Math.max(edge,cy));
 }
 function zoom(factor,x=width/2,y=height/2) {
   const [oldX,oldY]=world(x,y);
@@ -79,14 +80,16 @@ function zoom(factor,x=width/2,y=height/2) {
   requestDraw();
 }
 function deposit(index) {
-  return geology.at(index,surfaceSettings);
+  const deposit=geology.at(index,surfaceSettings);
+  const allowed=state.site.deposits;
+  return allowed===null || allowed?.includes(deposit?.id) ? deposit : null;
 }
 function footprint(x,y,w,h,color,stroke) {
   Sprites.polygon(ctx,[screen(x,y),screen(x+w,y),screen(x+w,y+h),screen(x,y+h)],color,stroke);
 }
 function blocked(x,y,recipe) {
   const {width:w,height:h}=recipe.footprint;
-  if(x+w>size || y+h>size || (recipe.deposit && deposit(y*size+x)?.id!==recipe.deposit)) return true;
+  if(!inside([x+w-1,y+h-1]) || (recipe.deposit && deposit(y*size+x)?.id!==recipe.deposit)) return true;
   for(let dy=0;dy<h;dy++) for(let dx=0;dx<w;dx++) if(owners[(y+dy)*size+x+dx]) return true;
   return false;
 }
@@ -101,17 +104,18 @@ function diamond(px,py,color,stroke) {
 }
 function draw() {
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.fillStyle="#38251d";
+  ctx.fillStyle=state?.site.kind==="orbit" ? "#101420" : "#38251d";
   ctx.fillRect(0,0,width,height);
   if(!grid) return;
 
   const pad=225*scale;
   const corners=[world(-pad,-pad),world(width+pad,-pad),
     world(-pad,height+pad),world(width+pad,height+pad)];
-  const x0=Math.max(0,Math.floor(Math.min(...corners.map(p=>p[0]))));
-  const x1=Math.min(size-1,Math.ceil(Math.max(...corners.map(p=>p[0]))));
-  const y0=Math.max(0,Math.floor(Math.min(...corners.map(p=>p[1]))));
-  const y1=Math.min(size-1,Math.ceil(Math.max(...corners.map(p=>p[1]))));
+  const edge=state.site.edge, end=edge+state.site.size-1;
+  const x0=Math.max(edge,Math.floor(Math.min(...corners.map(p=>p[0]))));
+  const x1=Math.min(end,Math.ceil(Math.max(...corners.map(p=>p[0]))));
+  const y0=Math.max(edge,Math.floor(Math.min(...corners.map(p=>p[1]))));
+  const y1=Math.min(end,Math.ceil(Math.max(...corners.map(p=>p[1]))));
   const buildings=[];
   drawnBuildings=buildings;
   visible=0;
@@ -122,7 +126,10 @@ function draw() {
       const index=y*size+x, type=grid[index];
       const shade=terrainShade(x,y), ore=deposit(index);
       if (px >= -50*scale && px <= width+50*scale && py < height && py+50*scale >= 0) {
-        ctx.drawImage(tileSprites[shade+(ore ? ore.index*8 : 0)],px-49*scale,py,98*scale,50*scale);
+        if(state.site.kind==="orbit")
+          diamond(px,py,shade%2 ? "#2e394a" : "#344153","#53647b");
+        else
+          ctx.drawImage(tileSprites[shade+(ore ? ore.index*8 : 0)],px-49*scale,py,98*scale,50*scale);
         if ((state.planet["surface-water"] || 0) >= 10 && !owners[index] && !ore && shade < 2) {
           const wetness = Math.min(.75,.22+(state.planet["surface-water"] || 0)/160);
           diamond(px,py,'rgba(47,119,135,'+wetness+')','#72a6a659');
@@ -303,6 +310,7 @@ function display(next) {
     metrics[i][2].value=value-metric.initial;
   });
   const unlocked=new Set(next.unlocked);
+  const available=new Set(next.allowedBuildings);
   catalog.research.forEach((t,i)=>{
     techCards[i].classList.toggle("positive",unlocked.has(t.id));
     techCards[i].lastElementChild.textContent=unlocked.has(t.id)?"Unlocked":
@@ -311,6 +319,7 @@ function display(next) {
   Array.from($("builds").children).forEach((button,i)=>{
     const id=catalog.buildings[i].research;
     const locked=Boolean(id && !unlocked.has(id));
+    button.disabled=!available.has(i+1);
     button.classList.toggle("locked",locked);
     button.querySelector("strong").textContent=(locked?"🔒 ":"")+catalog.buildings[i].name;
   });
@@ -318,7 +327,7 @@ function display(next) {
   $("speed").textContent=next.speed+"× speed";
   $("save").disabled=next.stress;
   $("weather").hidden=!next.storm;
-  $("world").textContent=next.stress?"Benchmark sector":"Landing sector";
+  $("world").textContent=next.stress?"Benchmark sector":next.site.name;
   $("clock").textContent="Sol "+(Math.floor(next.tick/24)+1)+" · "+String(next.tick%24).padStart(2,"0")+":00";
   $("mission").textContent=next.complete?"Terraforming targets met":next.shortage?"Life support shortage":
     next.unlocked.length===0?"Build a lab to unlock new facilities":"Research and terraforming underway";
@@ -381,7 +390,7 @@ async function command(action,extra={}) {
       requestDraw();
     }
     if(state.started && (state.revision!==mapRevision || surfaceRevision!==state.worldRevision)) await syncMap();
-    if(["stress","new","load","import","menu"].includes(action) && response.ok) {
+    if(["stress","new","load","import","menu","select-base"].includes(action) && response.ok) {
       sweepStart=undefined;
       $("sweep").disabled=false;
       frameTimes.length=drawTimes.length=0;
@@ -389,8 +398,10 @@ async function command(action,extra={}) {
       selected=cursor=anchor=undefined;
       $("buildingInfo").hidden=true;
       $("inspect").textContent="Select a tile to inspect it.";
+      chooseMode(0);
       center();
     }
+    await refreshLogistics();
     if(selected) inspectTile(selected);
     notice(result.message,!response.ok);
   } catch(error) {
@@ -408,6 +419,7 @@ async function refreshState() {
     if(state.started && (state.revision!==mapRevision || surfaceRevision!==state.worldRevision)) await syncMap();
     if(selected && state.started) inspectTile(selected);
     updateInfo(state.inspected);
+    await refreshLogistics();
   } catch {
     notice("Colony server unavailable. Retrying…",true);
   }
@@ -420,12 +432,16 @@ async function poll() {
   }
   setTimeout(poll,650);
 }
-const inside=([x,y])=>x>=0&&y>=0&&x<size&&y<size;
+const inside=([x,y])=> {
+  const {edge,size:span}=state.site;
+  return x>=edge && y>=edge && x<edge+span && y<edge+span;
+};
 function inspectTile([x,y]) {
   if(!grid || !inside([x,y])) return;
   const index=y*size+x, owner=owners[index]-1, resource=deposit(index);
   const recipe=owner>=0?catalog.buildings[grid[owner]-1]:null;
-  $("inspect").textContent=x+", "+y+"  ·  "+(recipe?.name || resource?.name || "Open regolith");
+  $("inspect").textContent=x+", "+y+"  ·  "+(recipe?.name || resource?.name ||
+    (state.site.kind==="orbit" ? "Open station tile" : "Open regolith"));
 }
 function placeInfo() {
   const box=$("buildingInfo");
@@ -447,6 +463,22 @@ function updateInfo(info) {
   if(info.ratedPowerOutput) lines.push("Power output "+info.powerOutput+" / "+info.ratedPowerOutput);
   if(info.ratedPowerUse) lines.push("Power draw "+info.powerUse+" / "+info.ratedPowerUse);
   if(Object.keys(info.outputs).length) lines.push("Yield "+formatAmounts(info.outputs)+" / operating tick");
+  if(recipe.forecastsWeather) {
+    const forecast=info.weatherForecast;
+    if(!forecast) lines.push("Forecast pending. Requires power and crew.");
+    else {
+      const age=state.tick-forecast.observedAt;
+      const range=(min,max)=>min===max ? String(min) : min+"–"+max;
+      lines.push(age || !info.running
+        ? "Stale forecast · recorded at tick "+forecast.observedAt+" ("+age+" ticks ago)"
+        : "Forecast recorded at tick "+forecast.observedAt);
+      lines.push("Next storm: "+range(forecast.startsInMin,forecast.startsInMax)+" ticks from reading");
+      lines.push("Expected duration: "+range(forecast.durationMin,forecast.durationMax)+" ticks");
+      lines.push("Storm solar: "+forecast.stormSolarOutput+" / "+forecast.demand+" total demand");
+      lines.push(forecast.batteryTicks===null ? "Battery backup unnecessary at recorded demand"
+        : "Estimated battery cover: "+forecast.batteryTicks+" full ticks");
+    }
+  }
   $("infoDetails").textContent=lines.join("\n");
   $("toggleBuilding").textContent=info.disabled?"Enable":"Shut down";
   $("toggleBuilding").onclick=()=>command("toggle",{index:info.index});
@@ -605,6 +637,7 @@ async function initialize() {
     geology=makeGeology(catalog,deposits);
     createMapEditor(catalog,deposits,geology,map=>command("new",{map}));
     populateMenu();
+    initializeLogistics();
     poll();
   } catch(error) {
     notice("Could not load the game catalog. "+error.message,true);

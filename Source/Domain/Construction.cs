@@ -20,7 +20,9 @@ sealed partial class Colony
         if ((uint)index >= Grid.Length || type < 1 || type > counts.Length)
             throw new InvalidOperationException("Choose a valid tile and building.");
         var b = rules.Buildings[type - 1];
-        if (!surface.Open(index,b.Footprint)) throw new InvalidOperationException("The building footprint is blocked or outside the map.");
+        if (!Site.Allows(b)) throw new InvalidOperationException("This facility cannot operate in this environment.");
+        if (!Site.Contains(index,b.Footprint) || !surface.Open(index,b.Footprint))
+            throw new InvalidOperationException("The building footprint is blocked or outside the map.");
         if (!MatchesDeposit(index,b))
             throw new InvalidOperationException($"The anchor requires {rules.World.Deposits.Single(d => d.Id == b.Deposit).Name}.");
         CheckBuild(b,1);
@@ -52,6 +54,7 @@ sealed partial class Colony
         if (area > 256) throw new InvalidOperationException("Select an area of 256 tiles or fewer.");
 
         var b = type == 0 ? null : rules.Buildings[type - 1];
+        if (b is not null && !Site.Allows(b)) throw new InvalidOperationException("This facility cannot operate in this environment.");
         var edits = new List<TileEdit>(area);
         var claimed = new HashSet<int>();
         for (int y = y0; y <= y1; y++)
@@ -64,7 +67,7 @@ sealed partial class Colony
                 if (owner >= 0 && claimed.Add(owner)) edits.Add(new(owner,0));
             }
             else if (x + b.Footprint.Width - 1 <= x1 && y + b.Footprint.Height - 1 <= y1 &&
-                surface.Open(index,b.Footprint) && MatchesDeposit(index,b) &&
+                Site.Contains(index,b.Footprint) && surface.Open(index,b.Footprint) && MatchesDeposit(index,b) &&
                 Surface.Tiles(index,b.Footprint).All(tile => !claimed.Contains(tile)))
             {
                 edits.Add(Edit(index,type,b.Footprint));
@@ -107,7 +110,8 @@ sealed partial class Colony
             ratedPowerOutput = OutputPower(recipe), powerUse = running ? recipe.Power : 0,
             ratedPowerUse = recipe.Power, outputs = recipe.Outputs,
             width = (int)Widths[index], height = (int)Heights[index],
-            upgrade = level <= recipe.Upgrades.Length ? recipe.Upgrades[level - 1] : null
+            upgrade = level <= recipe.Upgrades.Length ? recipe.Upgrades[level - 1] : null,
+            weatherForecast = weatherForecasts.GetValueOrDefault(index)
         };
     }
 
@@ -176,6 +180,7 @@ sealed partial class Colony
         int i = Grid[index] - 1;
         if (!disabled.Remove(index)) Group(index).Remove(index);
         levels.Remove(index);
+        weatherForecasts.Remove(index);
         Grid[index] = 0;
         counts[i]--;
         surface.Clear(index);

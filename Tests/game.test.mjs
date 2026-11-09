@@ -84,6 +84,10 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   }
 
   const catalog = await (await get("/api/catalog")).json();
+  const network = await (await get("/api/logistics")).json();
+  assert.deepEqual(network.bases.map(base => base.id), ["mars"]);
+  assert.ok(network.sites.some(site => site.kind === "orbit" && site.size === 16));
+  assert.ok(network.sites.some(site => site.kind === "moon" && site.size === 316));
   assert.match(await (await get("/")).text(), /game\.js/);
   const mine = catalog.buildings.find(building => building.deposit === "iron");
   const image = await get("/" + mine.image);

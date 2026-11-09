@@ -614,5 +614,63 @@
       "width": 2,
       "height": 2
     }
+  },
+  {
+    "id": 28,
+    "name": "Weather Observatory",
+    "category": "Research",
+    "art": "lab",
+    "image": "assets/research-lab.png",
+    "cost": {
+      "alloy": 8
+    },
+    "power": 2,
+    "crew": 1,
+    "priority": 28,
+    "forecastsWeather": true
+  },
+  {
+    "id": 29,
+    "name": "Space communications relay",
+    "category": "Space logistics",
+    "art": "lab",
+    "image": "assets/research-lab.png",
+    "cost": { "alloy": 10 },
+    "power": 1,
+    "priority": 22,
+    "spaceRole": "relay"
+  },
+  {
+    "id": 30,
+    "name": "Spacecraft assembly yard",
+    "category": "Space logistics",
+    "art": "launch",
+    "image": "assets/space-launch-site.png",
+    "cost": { "alloy": 20 },
+    "power": 3,
+    "priority": 26,
+    "spaceRole": "assembly"
+  },
+  {
+    "id": 31,
+    "name": "Surface cargo terminal",
+    "category": "Space logistics",
+    "art": "refinery",
+    "image": "assets/refinery.png",
+    "cost": { "alloy": 12 },
+    "power": 1,
+    "priority": 23,
+    "spaceRole": "terminal"
+  },
+  {
+    "id": 32,
+    "name": "Orbital dock",
+    "category": "Space logistics",
+    "art": "habitat",
+    "image": "assets/habitat.png",
+    "cost": { "alloy": 12 },
+    "power": 1,
+    "priority": 23,
+    "spaceRole": "dock"
   }
 ]

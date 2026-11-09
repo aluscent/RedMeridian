@@ -36,6 +36,8 @@ sealed record Building
     public int ChargeRate { get; init; }
     public int DischargeRate { get; init; }
     public int Priority { get; init; } = 70;
+    public bool ForecastsWeather { get; init; }
+    public string? SpaceRole { get; init; }
     public string? Deposit { get; init; }
     public string? Research { get; init; }
 }
@@ -130,6 +132,8 @@ sealed class GameRules
                 $"Invalid footprint or upgrades for {b.Name}.");
             Require(b.Image is null || System.Text.RegularExpressions.Regex.IsMatch(b.Image,
                 @"^assets/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+[.]png$"), $"Invalid PNG path for {b.Name}.");
+            Require(b.SpaceRole is null or "relay" or "assembly" or "terminal" or "dock",
+                $"Unknown space role for {b.Name}.");
             Require((b.StormGeneration is null || b.Generation > 0) &&
                 (b.Generation == 0 || (b.Power == 0 && b.Storage == 0 && b.Outputs.Count == 0 && b.Effects.Count == 0 && b.Beds == 0)) &&
                 (b.Storage == 0 ? b.ChargeRate == 0 && b.DischargeRate == 0 :

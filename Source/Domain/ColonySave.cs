@@ -18,16 +18,17 @@ sealed partial class Colony
             if (Widths[index] != 1 || Heights[index] != 1 || level != 1 || off)
                 structures.Add(new(index,Widths[index],Heights[index],level,off));
         }
-        return new(4,tiles.ToArray(),null,population,tick,null,new(stock),new(planet),power.Charge,MapSettings,structures.ToArray());
+        return new(4,tiles.ToArray(),null,population,tick,null,new(stock),new(planet),power.Charge,MapSettings,structures.ToArray(),
+            weatherForecasts.Count == 0 ? null : new(weatherForecasts));
     }
 
-    public static Colony Restore(GameRules rules,SaveData? save)
+    public static Colony Restore(GameRules rules,SaveData? save,ColonySite? site = null)
     {
         if (save is null || save.Version is not (1 or 2 or 3 or 4) || save.Tiles is null ||
             save.Tiles.Length > Size * Size || save.Population is < 0 or > MaxPopulation ||
             save.Tick is < 0 or >= long.MaxValue || save.Charge < 0)
             throw new InvalidOperationException("Invalid colony save.");
-        var colony = new Colony(rules,map: save.Version == 4 ? save.Map : null,empty: true)
+        var colony = new Colony(rules,map: save.Version == 4 ? save.Map : null,empty: true,site: site)
             { population = save.Population, tick = save.Tick };
         var structures = new Dictionary<int,SavedStructure>();
         if (save.Version == 4 && save.Structures is not null)
@@ -45,12 +46,27 @@ sealed partial class Colony
             int index = tile[0], type = tile[1];
             var details = structures.Remove(index,out var saved) ? saved : new SavedStructure(index);
             var shape = new Footprint(details.Width,details.Height);
-            if (!colony.surface.Open(index,shape) || details.Level < 1 || details.Level > colony.groups[type - 1].Length)
+            if (!colony.Site.Contains(index,shape) || !colony.Site.Allows(rules.Buildings[type - 1]) ||
+                !colony.surface.Open(index,shape) || details.Level < 1 || details.Level > colony.groups[type - 1].Length)
                 throw new InvalidOperationException("Invalid footprint, overlap or upgrade level in save.");
             colony.Place(index,type,shape,details.Level,details.Disabled);
         }
 
         if (structures.Count > 0) throw new InvalidOperationException("Structure metadata has no matching tile.");
+        if (save.Version == 4 && save.WeatherForecasts is not null)
+        {
+            foreach (var (index, forecast) in save.WeatherForecasts)
+            {
+                if ((uint)index >= colony.Grid.Length || colony.Grid[index] == 0 ||
+                    !rules.Buildings[colony.Grid[index] - 1].ForecastsWeather ||
+                    forecast is null || forecast.ObservedAt < 0 || forecast.ObservedAt > save.Tick ||
+                    forecast.StartsInMin < 1 || forecast.StartsInMax < forecast.StartsInMin ||
+                    forecast.DurationMin < 1 || forecast.DurationMax < forecast.DurationMin ||
+                    forecast.StormSolarOutput < 0 || forecast.Demand < 0 || forecast.BatteryTicks < 0)
+                    throw new InvalidOperationException("Invalid weather observation in colony save.");
+                colony.weatherForecasts.Add(index, forecast);
+            }
+        }
 
         void Material(string id,long amount)
         {

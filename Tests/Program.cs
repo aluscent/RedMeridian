@@ -7,6 +7,9 @@ var rules = new GameRules(Path.Combine(AppContext.BaseDirectory, "Config"));
     ("Footprint ownership and map boundaries", FootprintOwnership),
     ("Area build rejects unaffordable orders without partial edits", AreaBuildIsAtomic),
     ("Starter colony produces resources and loses solar output during storms", StarterProduction),
+    ("Observatory narrows forecasts and preserves the last reading when offline", WeatherObservatory),
+    ("Spacecraft found bases, retain blocked cargo, and restore without duplicate delivery", SpaceLogistics),
+    ("Recurring routes respect reserves and avoid counting inbound cargo twice", RecurringCargo),
     ("Current saves preserve map edits, upgrades, and shutdowns", CurrentSaveRoundTrip),
     ("Legacy saves preserve the original footprint and resources", LegacySave),
     ("Overlapping structures in a save are rejected", InvalidSave)
@@ -110,6 +113,109 @@ void CurrentSaveRoundTrip()
     Equal<string?>(null, restored.Map.Paint[1]);
     Equal(new SavedStructure(0, Level: 2, Disabled: true), restored.Structures!.Single(s => s.Index == 0));
     foreach (var (id, amount) in saved.Materials!) Equal(amount, restored.Materials![id]);
+}
+
+void WeatherObservatory()
+{
+    var observatory = rules.Buildings.Single(b => b.ForecastsWeather);
+    var solar = rules.Buildings.Single(b => b.Art == "solar");
+    var colony = new Colony(rules, empty: true);
+    colony.Build(0, solar.Id);
+    colony.Build(1, observatory.Id);
+    Equal<Dictionary<int,WeatherForecast>?>(null, colony.Export().WeatherForecasts);
+    colony.Step();
+    var early = colony.Export().WeatherForecasts![1];
+    Equal((long)solar.StormGeneration!.Value, early.StormSolarOutput);
+    Equal<long?>(null, early.BatteryTicks);
+    var preStorm = Colony.Restore(rules, colony.Export() with { Tick = rules.World.Storm.Start - 2 });
+    preStorm.Step();
+    var latest = preStorm.Export().WeatherForecasts![1];
+    Equal(1L, latest.StartsInMin);
+    Equal(1L, latest.StartsInMax);
+    Equal((long)(rules.World.Storm.End - rules.World.Storm.Start), latest.DurationMin);
+    Equal(true, early.StartsInMax - early.StartsInMin > latest.StartsInMax - latest.StartsInMin);
+    preStorm.Toggle(1);
+    preStorm.Step();
+    var restored = Colony.Restore(rules, preStorm.Export());
+    Equal(latest, restored.Export().WeatherForecasts![1]);
+    Equal(true, restored.Export().Tick > latest.ObservedAt);
+    restored.Remove(1);
+    Equal<Dictionary<int,WeatherForecast>?>(null, restored.Export().WeatherForecasts);
+}
+
+SpaceProgram LaunchReadyProgram()
+{
+    var initial = new Colony(rules, empty: true).Export();
+    initial.Materials!["alloy"] = 500;
+    initial.Materials["propellant"] = 500;
+    var mars = Colony.Restore(rules, initial);
+    int Id(string role) => rules.Buildings.Single(b => b.SpaceRole == role).Id;
+    mars.Build(0, rules.Buildings.Single(b => b.Art == "solar").Id);
+    mars.Build(1, Id("relay"));
+    mars.Build(2, Id("assembly"));
+    mars.Build(3, Id("terminal"));
+    var program = new SpaceProgram(rules, mars);
+    program.Step();
+    program.Assemble(mars);
+    return program;
+}
+
+void SpaceLogistics()
+{
+    const string orbitId = "mars-orbit-1";
+    var program = LaunchReadyProgram();
+    var mars = program.Mars;
+    long before = mars.Stock("alloy");
+    Reject(() => program.Dispatch(mars, 1, orbitId, new() { ["alloy"] = SpaceProgram.Payload + 1 }));
+    Equal(before, mars.Stock("alloy"));
+    program.Dispatch(mars, 1, orbitId, new() { ["alloy"] = 20, ["propellant"] = 10, ["food"] = 10, ["water"] = 10 });
+    Equal(before - 20 - SpaceProgram.FoundingAlloy, mars.Stock("alloy"));
+    Reject(() => program.Base(orbitId));
+    program = SpaceProgram.Restore(rules, program.Export());
+    for (int i = 0; i < 6; i++) program.Step();
+    var orbit = program.Base(orbitId);
+    Equal(program.Mars.Tick, orbit.Tick);
+    Equal(20L, orbit.Stock("alloy"));
+    Equal(16, orbit.Site.Size);
+    Reject(() => orbit.Build(0, 1));
+    int iron = rules.Buildings.Single(b => b.Deposit == "iron").Id;
+    Reject(() => orbit.Build(510 * Colony.Size + 510, iron));
+    int lab = rules.Buildings.Single(b => b.Art == "lab" && b.Outputs.ContainsKey("research")).Id;
+    orbit.Build(510 * Colony.Size + 510, lab);
+    program.Step();
+    Equal(3L, orbit.Stock("research"));
+    program.Dispatch(orbit, 1, "mars", new() { ["propellant"] = 1 });
+    program.Mars.Toggle(3);
+    for (int i = 0; i < 6; i++) program.Step();
+    long fuel = program.Mars.Stock("propellant");
+    Equal("mars", program.Export().Space!.Ships[0].Destination);
+    program = SpaceProgram.Restore(rules, program.Export());
+    program.Mars.Toggle(3);
+    program.Step();
+    Equal(fuel + 1, program.Mars.Stock("propellant"));
+    program.Step();
+    Equal(fuel + 1, program.Mars.Stock("propellant"));
+    Equal<string?>(null, program.Export().Space!.Ships[0].Destination);
+}
+
+void RecurringCargo()
+{
+    const string orbitId = "mars-orbit-1";
+    var program = LaunchReadyProgram();
+    program.Dispatch(program.Mars, 1, orbitId, new() { ["propellant"] = 10 });
+    for (int i = 0; i < 7; i++) program.Step();
+    program.Assemble(program.Mars);
+    program.Assemble(program.Mars);
+    int reserve = (int)program.Mars.Stock("alloy") - 9;
+    program.SetRoute(new(2, "mars", orbitId, "alloy", reserve, 9));
+    program.SetRoute(new(3, "mars", orbitId, "alloy", 0, 9));
+    program.Step();
+    Equal((long)reserve, program.Mars.Stock("alloy"));
+    Equal(9L, program.Export().Space!.Ships[1].Cargo!["alloy"]);
+    Equal<string?>(null, program.Export().Space!.Ships[2].Destination);
+    for (int i = 0; i < 7; i++) program.Step();
+    Equal(9L, program.Base(orbitId).Stock("alloy"));
+    Equal<string?>(null, program.Export().Space!.Ships[1].Destination);
 }
 
 void LegacySave()
