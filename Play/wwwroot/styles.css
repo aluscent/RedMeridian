@@ -19,12 +19,7 @@ button{font:inherit;color:inherit;background:#2c241e;border:1px solid #584235;bo
 button:hover,button:focus-visible{border-color:var(--accent)}
 button[aria-pressed=true],.primary{background:#4b3020;border-color:#ac7146;color:#ffd2aa}
 button:disabled{opacity:.5;cursor:default}
-#stats{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));margin-bottom:12px;border:1px solid var(--line);border-radius:9px;background:var(--panel)}
-.stat{padding:8px 12px;border-right:1px solid var(--line);min-width:0}
-.stat:last-child{border-right:0}
-.stat strong{display:block;font:600 clamp(13px,1.6vw,20px) var(--mono);margin:2px 0}
 small,#inspect,#clock,footer,dt,#mission{color:var(--muted);font-size:12px}
-.stat small{display:block;min-height:1em}
 .layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(234px,275px);gap:12px;align-items:start}
 .stack{display:grid;gap:12px;min-width:0}
 .map,aside,.planet{border:1px solid var(--line);border-radius:9px;background:var(--panel);overflow:hidden}
@@ -32,7 +27,7 @@ small,#inspect,#clock,footer,dt,#mission{color:var(--muted);font-size:12px}
 #clock{margin-left:9px;font-family:var(--mono)}
 .map-bottom{min-height:38px}
 .viewport{position:relative;background:#382016}
-canvas#map{display:block;width:100%;height:clamp(360px,55vh,700px);touch-action:none;cursor:crosshair}
+canvas#map{display:block;width:100%;height:clamp(420px,69vh,900px);touch-action:none;cursor:crosshair}
 canvas#map:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .legend,#weather{position:absolute;pointer-events:none;padding:6px 9px;background:#201510e8;border:1px solid #b076504b;border-radius:5px;font:11px var(--mono)}
 .legend{bottom:10px;left:10px}.legend span+span{margin-left:9px}
@@ -51,14 +46,9 @@ dd{margin:0;font:12px var(--mono);color:var(--green)}
 #metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:0 10px 10px}
 .metric output{display:block;margin:3px 0;font:600 14px var(--mono)}
 progress{width:100%;height:6px;display:block;accent-color:#d18a58}
-@media(max-width:780px){.layout{grid-template-columns:1fr}#stats{grid-template-columns:repeat(4,1fr)}.stat{padding-inline:8px}#builds{grid-template-columns:repeat(2,minmax(0,1fr))}canvas#map{height:48vh;min-height:280px}}
+@media(max-width:780px){.layout{grid-template-columns:1fr}#builds{grid-template-columns:repeat(2,minmax(0,1fr))}canvas#map{height:61vh;min-height:320px}}
 @media(max-width:400px){#builds,#metrics{grid-template-columns:1fr 1fr}.build{grid-template-columns:23px minmax(0,1fr) auto}.build img{width:23px}}
 
-#stats{grid-template-columns:repeat(7,minmax(0,1fr))}
-@media(max-width:780px){#stats{grid-template-columns:repeat(4,minmax(0,1fr))}}
-@media(max-width:400px){#stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
-#stats .stat{border-bottom:1px solid var(--line)}
-#stats .stat strong{overflow-wrap:anywhere}
 .filter{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px;font-size:12px;color:var(--muted)}
 .filter select{min-width:0;background:#2c241e;color:var(--text);border:1px solid #584235;border-radius:5px;padding:4px 6px}
 #builds{max-height:405px;overflow:auto;align-content:start;padding-right:3px}
@@ -94,3 +84,12 @@ body:not(.playing) main,body:not(.playing) footer,body:not(.playing) .play-contr
 #infoDetails{white-space:pre-line;font:12px/1.6 var(--mono);margin-bottom:8px}
 #closeInfo{padding:1px 6px}
 @media(max-width:650px){.start-layout{grid-template-columns:1fr}.start{margin-inline:10px}}
+
+#stats{display:flex;flex-wrap:wrap;gap:4px 8px;padding:5px 8px;border-bottom:1px solid var(--line)}
+.stat{position:relative;font:12px var(--mono);white-space:nowrap}
+.stat summary{cursor:pointer;list-style:none;padding:3px 5px}
+.stat summary::-webkit-details-marker{display:none}
+.stat summary span{color:var(--accent)}
+.stat small{position:absolute;top:100%;left:0;z-index:4;padding:5px 8px;background:#28201b;border:1px solid var(--line);border-radius:4px}
+#infoDescription{margin:0 0 5px;color:var(--muted)}
+#shipAssembly{display:grid;gap:4px;margin:7px 0}

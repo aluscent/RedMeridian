@@ -16,7 +16,7 @@ function initializeLogistics() {
     const label=document.createElement("label"), input=document.createElement("input");
     input.type="number";
     input.min=0;
-    input.max=60;
+    input.max=Math.max(...catalog.shipTypes.map(type=>type.payload));
     input.placeholder="0";
     input.addEventListener("input", renderFlightQuote);
     label.append(material.name+" ",input);
@@ -26,7 +26,6 @@ function initializeLogistics() {
   }
   $("logistics").ontoggle=()=>refreshLogistics().catch(error=>notice(error.message,true));
   $("baseSelect").onchange=event=>command("select-base",{base:event.target.value});
-  $("assembleShip").onclick=()=>command("assemble");
   $("destination").onchange=$("shipSelect").onchange=renderFlightQuote;
   $("dispatchShip").onsubmit=event=>{
     event.preventDefault();
@@ -51,21 +50,23 @@ function renderFlightQuote() {
   const destination=$("destination").value;
   const leg=logistics?.legs.find(leg=>leg.from===state.site.id && leg.to===destination);
   const ship=Number($("shipSelect").value);
+  const type=catalog.shipTypes.find(type=>type.id===logistics?.ships.find(item=>item.id===ship)?.type);
+  const fuel=leg && type ? Math.ceil(leg.fuel*type.fuelPercent/100) : 0;
   const recurring=logistics?.routes.some(route=>route.ship===ship);
   const founding=logistics && !logistics.bases.some(base=>base.id===destination);
   const cargo=flightCargo();
   const units=Object.values(cargo).reduce((sum,amount)=>sum+amount,0);
   const required={...cargo};
-  if(leg) required.propellant=(required.propellant||0)+leg.fuel;
+  if(leg) required.propellant=(required.propellant||0)+fuel;
   if(founding) required.alloy=(required.alloy||0)+logistics.foundingAlloy;
   const short=local && Object.entries(required).some(([id,amount])=>local.stock[id]<amount);
-  $("launchShip").disabled=!leg || !ship || recurring || short || units>logistics.payload || !local?.dock || !local.relay;
+  $("launchShip").disabled=!leg || !type || recurring || short || units>type.payload || !local?.dock || !local.relay;
   $("setRoute").disabled=!ship || !leg || founding;
-  $("flightQuote").textContent=leg
-    ? units+"/"+logistics.payload+" cargo · "+leg.fuel+" fuel · "+leg.ticks+" ticks"
+  $("flightQuote").textContent=leg && type
+    ? units+"/"+type.payload+" cargo · "+fuel+" fuel · "+leg.ticks+" ticks"
       +(founding?" · "+logistics.foundingAlloy+" alloy founding kit":"")
       +(short?" · insufficient stock":"")+(recurring?" · recurring route assigned":"")
-    : "Choose a destination for a launch estimate.";
+    : "Choose an idle spacecraft and a destination. Build spacecraft from the assembly yard inspector.";
 }
 
 async function refreshLogistics() {
@@ -84,7 +85,7 @@ async function refreshLogistics() {
   setOptions($("destination"),logistics.sites.filter(site=>site.id!==local.id)
     .map(site=>[site.id,names.get(site.id)+(bases.some(base=>base.id===site.id)?"":" (found base)")]));
   setOptions($("shipSelect"),logistics.ships.filter(ship=>ship.location===local.id && !ship.destination)
-    .map(ship=>[ship.id,"Spacecraft "+ship.id]));
+    .map(ship=>[ship.id,catalog.shipTypes.find(type=>type.id===ship.type).name+" #"+ship.id]));
 
   function row(tag,values) {
     const row=document.createElement("tr");
@@ -102,8 +103,6 @@ async function refreshLogistics() {
       return number.format(base.stock[m.id])+" ("+(delta>=0?"+":"")+delta+"/tick)";
     }),Object.entries(base.reserves).map(([id,ticks])=>id+": "+(ticks===null?"stable":ticks+" ticks")).join(", ")
   ])));
-  $("assembleShip").disabled=!local.assembly || !local.dock || local.stock.alloy<logistics.assemblyAlloy;
-  $("assembleShip").textContent="Assemble spacecraft · "+logistics.assemblyAlloy+" alloy";
   const orbitalResearch=Math.max(0,...bases.filter(base=>logistics.sites.some(site=>site.id===base.id && site.kind==="orbit"))
     .map(base=>base.stock[catalog.world.researchMaterial]));
   $("spaceFacilities").textContent="Local facilities · assembly "+(local.assembly?"online":"offline")+
@@ -117,7 +116,7 @@ async function refreshLogistics() {
         (ship.waiting?"Waiting for an operating dock or storage space":"ETA "+Math.max(0,ship.arrivalTick-logistics.tick)+" ticks")+
         " · "+(formatAmounts(ship.cargo || {}) || "empty")
       : "Docked at "+names.get(ship.location);
-    item.textContent="Spacecraft "+ship.id+" · "+flight;
+    item.textContent=catalog.shipTypes.find(type=>type.id===ship.type).name+" #"+ship.id+" · "+flight;
     const route=logistics.routes.find(route=>route.ship===ship.id);
     if(route) {
       item.append(" · Recurring "+route.material+" · "+names.get(route.source)+" → "+names.get(route.destination)+" ");

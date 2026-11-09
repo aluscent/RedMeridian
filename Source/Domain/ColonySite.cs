@@ -1,10 +1,13 @@
 namespace RedMeridian.Domain;
 
-sealed record ColonySite(string Id, string Name, string Kind, int Size, int Seed, int Abundance, int Distance)
+sealed record ColonySite(string Id, string Name, string Kind, int Width, int Seed, int Abundance, int Distance, int? Length = null)
 {
     static readonly string[] AsteroidDeposits = ["iron", "titanium", "uranium"];
     static readonly string[] MoonDeposits = ["ice", "brine", "silicon"];
-    public int Edge => (Colony.Size - Size) / 2;
+    public int Height => Length ?? Width;
+    public int Left => (Colony.Size - Width) / 2;
+    public int Top => (Colony.Size - Height) / 2;
+    public bool PlanetaryEngineering => Kind == "mars";
     public string[]? Deposits => Kind switch
     {
         "orbit" => [],
@@ -17,23 +20,24 @@ sealed record ColonySite(string Id, string Name, string Kind, int Size, int Seed
     public static readonly ColonySite[] All =
     [
         Mars,
-        new("mars-orbit-1", "Mars Orbit · Slot 1", "orbit", 16, 1, 0, 1),
-        new("mars-orbit-2", "Mars Orbit · Slot 2", "orbit", 16, 2, 0, 1),
+        new("mars-orbit-1", "Mars Orbit · Slot 1", "orbit", 5, 1, 0, 1, 150),
+        new("mars-orbit-2", "Mars Orbit · Slot 2", "orbit", 5, 2, 0, 1, 150),
         new("ceres", "Ceres Mining Outpost", "asteroid", 32, 3107, 180, 3),
         new("europa", "Europa Ice Fields", "moon", 316, -17031, 130, 6),
-        new("jupiter-orbit-1", "Jupiter Orbit · Slot 1", "orbit", 16, 3, 0, 5),
-        new("jupiter-orbit-2", "Jupiter Orbit · Slot 2", "orbit", 16, 4, 0, 5)
+        new("jupiter-orbit-1", "Jupiter Orbit · Slot 1", "orbit", 5, 3, 0, 5, 150),
+        new("jupiter-orbit-2", "Jupiter Orbit · Slot 2", "orbit", 5, 4, 0, 5, 150)
     ];
 
     public bool Contains(int index, Footprint footprint)
     {
         int x = index % Colony.Size, y = index / Colony.Size;
-        return Surface.Fits(index, footprint) && x >= Edge && y >= Edge &&
-            x + footprint.Width <= Edge + Size && y + footprint.Height <= Edge + Size;
+        return Surface.Fits(index, footprint) && x >= Left && y >= Top &&
+            x + footprint.Width <= Left + Width && y + footprint.Height <= Top + Height;
     }
 
-    public bool Allows(Building building) =>
+    public bool Allows(Building building, bool restoring = false) =>
         (Kind == "mars" || !building.ForecastsWeather) &&
+        (PlanetaryEngineering || restoring || building.Effects.Count == 0) &&
         (Kind == "orbit"
             ? building.Deposit is null && building.Effects.Count == 0 && building.Art != "wind" &&
                 (building.Art != "launch" || building.SpaceRole == "assembly") &&

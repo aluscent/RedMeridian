@@ -19,7 +19,8 @@ sealed partial class Colony
                 structures.Add(new(index,Widths[index],Heights[index],level,off));
         }
         return new(4,tiles.ToArray(),null,population,tick,null,new(stock),new(planet),power.Charge,MapSettings,structures.ToArray(),
-            weatherForecasts.Count == 0 ? null : new(weatherForecasts), ActivatedResearch: activatedResearch.ToArray());
+            weatherForecasts.Count == 0 ? null : new(weatherForecasts), ActivatedResearch: activatedResearch.ToArray(),
+            LongOrbit: Site.Kind == "orbit" && Site.Height == 150, Assembly: assemblyOrders.Values.ToArray());
     }
 
     public static Colony Restore(GameRules rules,SaveData? save,ColonySite? site = null)
@@ -28,6 +29,7 @@ sealed partial class Colony
             save.Tiles.Length > Size * Size || save.Population is < 0 or > MaxPopulation ||
             save.Tick is < 0 or >= long.MaxValue || save.Charge < 0)
             throw new InvalidOperationException("Invalid colony save.");
+        if (site?.Kind == "orbit" && !save.LongOrbit) site = site with { Width = 16, Length = null };
         var colony = new Colony(rules,map: save.Version == 4 ? save.Map : null,empty: true,site: site)
             { population = save.Population, tick = save.Tick };
         var structures = new Dictionary<int,SavedStructure>();
@@ -46,13 +48,20 @@ sealed partial class Colony
             int index = tile[0], type = tile[1];
             var details = structures.Remove(index,out var saved) ? saved : new SavedStructure(index);
             var shape = new Footprint(details.Width,details.Height);
-            if (!colony.Site.Contains(index,shape) || !colony.Site.Allows(rules.Buildings[type - 1]) ||
+            if (!colony.Site.Contains(index,shape) || !colony.Site.Allows(rules.Buildings[type - 1], restoring: true) ||
                 !colony.surface.Open(index,shape) || details.Level < 1 || details.Level > colony.groups[type - 1].Length)
                 throw new InvalidOperationException("Invalid footprint, overlap or upgrade level in save.");
             colony.Place(index,type,shape,details.Level,details.Disabled);
         }
 
         if (structures.Count > 0) throw new InvalidOperationException("Structure metadata has no matching tile.");
+        foreach (var order in save.Assembly ?? [])
+        {
+            if (order is null || !colony.IsAssemblyYard(order.Index) || order.TicksLeft <= 0 ||
+                order.TicksLeft > 100_000 || !colony.assemblyOrders.TryAdd(order.Index,order))
+                throw new InvalidOperationException("Invalid spacecraft assembly order.");
+            rules.ShipType(order.Type);
+        }
         if (save.Version == 4 && save.WeatherForecasts is not null)
         {
             foreach (var (index, forecast) in save.WeatherForecasts)
@@ -78,7 +87,7 @@ sealed partial class Colony
         {
             var metric = rules.World.Metrics.FirstOrDefault(m => m.Id == id);
             if (metric is null) throw new InvalidOperationException($"Unknown saved planet metric: {id}.");
-            colony.planet[id] = Math.Clamp(value,metric.Initial,metric.Target);
+            if (colony.Site.PlanetaryEngineering) colony.planet[id] = Math.Clamp(value,metric.Initial,metric.Target);
         }
 
         if (save.Version >= 3)

@@ -32,8 +32,10 @@ reading, including its original observation tick.
 
 1. On Mars, build and power a **Space communications relay**, a **Spacecraft
    assembly yard**, and a **Surface cargo terminal**. Produce propellant.
-2. Click **Space travel** above the map to open **Space logistics**. Assemble a spacecraft for 16 alloy,
-   choose a destination, and load up to 60 units. A founding mission also costs
+2. Inspect the **Spacecraft Assembly Yard** and select a spacecraft type to start
+   assembly. It advances when the yard and cargo facility are operating. When
+   the ship is ready, click **Space travel** above the map, select the spacecraft,
+   and load cargo up to its capacity. A founding mission also costs
    24 alloy and installs solar power, a habitat, communications, and a dock or
    terminal. Pack food, water, alloy for new facilities, and return propellant.
 3. After arrival, switch views from the same panel. Build a Research Lab at an
@@ -46,13 +48,21 @@ reading, including its original observation tick.
 All bases advance together. Cargo remains aboard if the destination's dock is
 offline or storage is full. Saving captures all bases, spacecraft, and routes.
 Older single-colony saves open on Mars with an empty fleet.
+New orbital stations are 5 tiles wide and 150 tiles long. Existing orbital
+stations keep their saved layouts.
 
 ## Activate research milestones
 
 Research Labs generate research points. Open **Research milestones** and click
 **Activate** when the colony has enough points and its prerequisites are active.
-Activation uses the points as a threshold. Each base tracks its own milestones.
-Older saves retain the milestones they had already unlocked.
+Activation uses the selected base's points as a threshold and applies to all
+bases. Older saves retain the combined milestones unlocked across their bases.
+
+Edit `Play/Config/spacecraft.json` and mirror changes in `Source/Config` to
+configure spacecraft types. Each entry has an `id`, `name`, `payload`,
+`fuelPercent`, `buildTicks`, and a `cost` object keyed by material ID. Fuel is
+rounded up after applying the percentage to the route's standard fuel cost.
+Keep IDs stable because spacecraft and assembly orders reference them in saves.
 
 ## Tester mode
 

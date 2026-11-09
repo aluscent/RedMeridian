@@ -2,11 +2,42 @@ namespace RedMeridian.Domain;
 
 sealed record SpaceSave(Dictionary<string,SaveData> Bases, Spacecraft[] Ships, CargoRoute[]? Routes = null);
 sealed record Spacecraft(int Id, string Location, string? Destination = null, long ArrivalTick = 0,
-    Dictionary<string,long>? Cargo = null, bool Founding = false);
+    Dictionary<string,long>? Cargo = null, bool Founding = false, string Type = GameRules.LegacyShipType);
+sealed record AssemblyOrder(int Index, string Type, int TicksLeft);
 sealed record CargoRoute(int Ship, string Source, string Destination, string Material, int Reserve, int Reorder);
 
 sealed partial class Colony
 {
+    readonly Dictionary<int,AssemblyOrder> assemblyOrders = new();
+    public int PendingShips => assemblyOrders.Count;
+    bool IsAssemblyYard(int index) => (uint)index < Grid.Length && Grid[index] > 0 &&
+        rules.Buildings[Grid[index] - 1].SpaceRole == "assembly";
+
+    public void StartAssembly(int tile, ShipType type)
+    {
+        int index = RequireStructure(tile);
+        if (!IsAssemblyYard(index) || !Group(index).IsRunning(index) || !CanDock)
+            throw new InvalidOperationException("An operating assembly yard and cargo terminal or dock are required.");
+        if (assemblyOrders.ContainsKey(index)) throw new InvalidOperationException("This yard is already assembling a spacecraft.");
+        Withdraw(type.Cost.ToDictionary(item => item.Key, item => (long)item.Value));
+        assemblyOrders.Add(index, new(index, type.Id, type.BuildTicks));
+    }
+
+    public IEnumerable<string> FinishAssembly()
+    {
+        foreach (var order in assemblyOrders.Values.ToArray())
+        {
+            if (!CanDock || !Group(order.Index).IsRunning(order.Index)) continue;
+            if (order.TicksLeft > 1)
+                assemblyOrders[order.Index] = order with { TicksLeft = order.TicksLeft - 1 };
+            else
+            {
+                assemblyOrders.Remove(order.Index);
+                yield return order.Type;
+            }
+        }
+    }
+
     public long Tick => tick;
     public bool Online(string role) => consumers.Any(group => group.Building.SpaceRole == role && group.Active > 0);
     public bool CanDock => Online(Site.Kind == "orbit" ? "dock" : "terminal");
@@ -38,7 +69,6 @@ sealed partial class Colony
 
 sealed class SpaceProgram(GameRules rules, Colony mars)
 {
-    public const int Payload = 60;
     public const int FoundingAlloy = 24;
     const int MaxShips = 32;
     readonly Dictionary<string,Colony> bases = new() { [ColonySite.Mars.Id] = mars };
@@ -58,14 +88,15 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
         int lift = from.Kind is "mars" or "moon" ? (distance > 1 ? 8 : 4) : 0;
         return (2 + lift + distance * 2, 2 + distance * 4);
     }
+    static int FuelFor(int baseFuel, ShipType type) => (baseFuel * type.FuelPercent + 99) / 100;
 
     public object Summary() => new
     {
-        tick = mars.Tick, payload = Payload, foundingAlloy = FoundingAlloy, assemblyAlloy = 16,
+        tick = mars.Tick, foundingAlloy = FoundingAlloy,
         sites = ColonySite.All, bases = bases.Values.Select(colony => colony.LogisticsSummary()).ToArray(),
         ships = ships.Select(ship => new
         {
-            ship.Id, ship.Location, ship.Destination, ship.ArrivalTick, ship.Cargo, ship.Founding,
+            ship.Id, ship.Type, ship.Location, ship.Destination, ship.ArrivalTick, ship.Cargo, ship.Founding,
             waiting = ship.Destination is not null && ship.ArrivalTick <= mars.Tick && !ship.Founding
         }).ToArray(),
         routes = routes.Values.ToArray(),
@@ -76,13 +107,11 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
         })).ToArray()
     };
 
-    public void Assemble(Colony origin)
+    public void Assemble(Colony origin, int index, string? type)
     {
-        if (!origin.Online("assembly") || !origin.CanDock)
-            throw new InvalidOperationException("An operating assembly yard and cargo terminal or dock are required.");
-        if (ships.Count == MaxShips) throw new InvalidOperationException("Fleet limit reached.");
-        origin.Withdraw(new() { ["alloy"] = 16 });
-        ships.Add(new(ships.Count + 1, origin.Site.Id));
+        if (ships.Count + bases.Values.Sum(colony => colony.PendingShips) >= MaxShips)
+            throw new InvalidOperationException("Fleet limit reached.");
+        origin.StartAssembly(index, rules.ShipType(type));
     }
 
     public void Dispatch(Colony origin, int shipId, string? destination, Dictionary<string,long>? manifest, bool automatic = false)
@@ -98,13 +127,14 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
         var target = Site(destination);
         if (target == origin.Site) throw new InvalidOperationException("Choose a different destination.");
         var cargo = manifest is null ? new Dictionary<string,long>() : new(manifest);
-        ValidateCargo(cargo);
+        var type = rules.ShipType(ship.Type);
+        ValidateCargo(cargo,type.Payload);
         bool founding = !bases.ContainsKey(target.Id);
         if (founding && ships.Any(other => other.Founding && other.Destination == target.Id))
             throw new InvalidOperationException("A founding mission is already on its way.");
         var (fuel, ticks) = Leg(origin.Site, target);
         if (mars.Tick >= long.MaxValue - ticks) throw new InvalidOperationException("Simulation clock limit reached.");
-        var cost = new Dictionary<string,long>(cargo) { ["propellant"] = cargo.GetValueOrDefault("propellant") + fuel };
+        var cost = new Dictionary<string,long>(cargo) { ["propellant"] = cargo.GetValueOrDefault("propellant") + FuelFor(fuel,type) };
         if (founding) cost["alloy"] = cargo.GetValueOrDefault("alloy") + FoundingAlloy;
         origin.Withdraw(cost);
         ships[shipId - 1] = ship with
@@ -113,12 +143,12 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
         };
     }
 
-    void ValidateCargo(Dictionary<string,long>? cargo)
+    void ValidateCargo(Dictionary<string,long>? cargo,int payload)
     {
-        if (cargo is null || cargo.Any(item => item.Value is <= 0 or > Payload ||
+        if (cargo is null || cargo.Any(item => item.Value <= 0 || item.Value > payload ||
             item.Key == rules.World.ResearchMaterial || !rules.Materials.Any(m => m.Id == item.Key)) ||
-            cargo.Values.Sum() > Payload)
-            throw new InvalidOperationException($"Cargo must contain at most {Payload} units of physical materials.");
+            cargo.Values.Sum() > payload)
+            throw new InvalidOperationException($"Cargo must contain at most {payload} units of physical materials.");
     }
 
     public void SetRoute(CargoRoute route)
@@ -139,7 +169,12 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
 
     public void Step()
     {
-        foreach (var colony in bases.Values) colony.Step();
+        foreach (var colony in bases.Values)
+        {
+            colony.Step();
+            foreach (string type in colony.FinishAssembly())
+                ships.Add(new(ships.Count + 1, colony.Site.Id, Type: type));
+        }
         for (int i = 0; i < ships.Count; i++)
         {
             var ship = ships[i];
@@ -148,7 +183,7 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
             var target = bases[ship.Destination];
             if ((!ship.Founding && !target.CanDock) || !target.CanReceive(ship.Cargo!)) continue;
             target.Receive(ship.Cargo!);
-            ships[i] = new(ship.Id, ship.Destination);
+            ships[i] = new(ship.Id, ship.Destination, Type: ship.Type);
         }
         foreach (var route in routes.Values.OrderBy(route => route.Ship))
         {
@@ -159,8 +194,9 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
             long incoming = ships.Where(other => other.Destination == route.Destination)
                 .Sum(other => other.Cargo!.GetValueOrDefault(route.Material));
             long need = route.Reorder - target.Stock(route.Material) - incoming;
-            int fuel = route.Material == "propellant" ? Leg(source.Site, target.Site).Fuel : 0;
-            long quantity = Math.Min(Payload, Math.Min(need, source.Stock(route.Material) - route.Reserve - fuel));
+            var type = rules.ShipType(ship.Type);
+            int fuel = route.Material == "propellant" ? FuelFor(Leg(source.Site, target.Site).Fuel,type) : 0;
+            long quantity = Math.Min(type.Payload, Math.Min(need, source.Stock(route.Material) - route.Reserve - fuel));
             if (quantity <= 0) continue;
             try
             {
@@ -179,9 +215,11 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
         int habitat = rules.Buildings.First(b => b.Art == "habitat").Id;
         int dock = BuildingId(site.Kind == "orbit" ? "dock" : "terminal");
         var stock = rules.Materials.ToDictionary(m => m.Id, _ => 0L);
-        return Colony.Restore(rules, new(4, [[center, solar], [center+1, habitat],
+        var colony = Colony.Restore(rules, new(4, [[center, solar], [center+1, habitat],
             [center+Colony.Size, dock], [center+Colony.Size+1, BuildingId("relay")]], null, 2, mars.Tick, null,
-            stock, new(), Map: new(site.Seed, site.Abundance), ActivatedResearch: []), site);
+            stock, new(), Map: new(site.Seed, site.Abundance), ActivatedResearch: [], LongOrbit: site.Kind == "orbit"), site);
+        mars.ShareResearchWith(colony);
+        return colony;
     }
 
     public SaveData Export() => mars.Export() with
@@ -202,18 +240,23 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
             if (id == ColonySite.Mars.Id || colonySave is null || colonySave.Version != 4 ||
                 colonySave.Tick != save.Tick || colonySave.Space is not null)
                 throw new InvalidOperationException("Invalid remote base save.");
-            program.bases.Add(id, Colony.Restore(rules, colonySave, Site(id)));
+            var colony = Colony.Restore(rules, colonySave, Site(id));
+            program.bases.Add(id, colony);
+            program.Mars.ShareResearchWith(colony);
         }
+        if (space.Ships.Length + program.bases.Values.Sum(colony => colony.PendingShips) > MaxShips)
+            throw new InvalidOperationException("Fleet and assembly orders exceed the fleet limit.");
         var founding = new HashSet<string>();
         foreach (var ship in space.Ships)
         {
             if (ship is null || ship.Id != program.ships.Count + 1 || ship.Location is null ||
                 !program.bases.ContainsKey(ship.Location))
                 throw new InvalidOperationException("Invalid spacecraft save.");
+            var type = rules.ShipType(ship.Type);
             if (ship.Destination is { } destination)
             {
                 Site(destination);
-                program.ValidateCargo(ship.Cargo);
+                program.ValidateCargo(ship.Cargo,type.Payload);
                 if (destination == ship.Location || ship.ArrivalTick <= 0 ||
                     ship.Founding == program.bases.ContainsKey(destination) ||
                     ship.Founding && (!founding.Add(destination) || ship.ArrivalTick <= save.Tick))

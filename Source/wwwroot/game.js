@@ -6,14 +6,18 @@ const size = 1024, number = new Intl.NumberFormat();
 let catalog, stats, metrics, techCards, tileSprites, buildingSprites, masks, geology;
 let surfaceSettings={seed:0,abundance:100,paint:{}}, surfaceRevision=-1;
 let widths, heights, owners;
+const environmentSprites=new Map();
+let spriteEnvironment="planet";
 
-function makeStats(name) {
-  const el = document.createElement("div");
+function makeStats(name,icon) {
+  const el = document.createElement("details");
   el.className = "stat";
-  el.innerHTML = '<small></small><strong>—</strong><small></small>';
-  el.firstElementChild.textContent = name;
+  el.innerHTML = '<summary><span aria-hidden="true"></span> <strong>-</strong></summary><small></small>';
+  const [summary,detail]=el.children;
+  summary.firstElementChild.textContent=icon;
+  summary.title=name;
   $("stats").append(el);
-  return el.children;
+  return [summary,summary.lastElementChild,detail,name];
 }
 function makeMetric(metric) {
   const el = document.createElement("div");
@@ -39,8 +43,8 @@ function requestDraw() {
 }
 
 function center() {
-  cx = 511;
-  cy = 511;
+  cx = state ? state.site.left+(state.site.width-1)/2 : 511;
+  cy = state ? state.site.top+(state.site.height-1)/2 : 511;
   scale = Math.min(1.07, Math.max(.56, width/850));
   requestDraw();
 }
@@ -66,9 +70,10 @@ function pick(x,y) {
   return groundAt(x,y);
 }
 function clampCamera() {
-  const edge=state?.site.edge ?? 0, end=size-edge-1;
-  cx = Math.min(end, Math.max(edge,cx));
-  cy = Math.min(end, Math.max(edge,cy));
+  if(!state) return;
+  const {left,top,width:spanX,height:spanY}=state.site;
+  cx = Math.min(left+spanX-1, Math.max(left,cx));
+  cy = Math.min(top+spanY-1, Math.max(top,cy));
 }
 function zoom(factor,x=width/2,y=height/2) {
   const [oldX,oldY]=world(x,y);
@@ -111,11 +116,11 @@ function draw() {
   const pad=225*scale;
   const corners=[world(-pad,-pad),world(width+pad,-pad),
     world(-pad,height+pad),world(width+pad,height+pad)];
-  const edge=state.site.edge, end=edge+state.site.size-1;
-  const x0=Math.max(edge,Math.floor(Math.min(...corners.map(p=>p[0]))));
-  const x1=Math.min(end,Math.ceil(Math.max(...corners.map(p=>p[0]))));
-  const y0=Math.max(edge,Math.floor(Math.min(...corners.map(p=>p[1]))));
-  const y1=Math.min(end,Math.ceil(Math.max(...corners.map(p=>p[1]))));
+  const {left,top,width:spanX,height:spanY}=state.site;
+  const x0=Math.max(left,Math.floor(Math.min(...corners.map(p=>p[0]))));
+  const x1=Math.min(left+spanX-1,Math.ceil(Math.max(...corners.map(p=>p[0]))));
+  const y0=Math.max(top,Math.floor(Math.min(...corners.map(p=>p[1]))));
+  const y1=Math.min(top+spanY-1,Math.ceil(Math.max(...corners.map(p=>p[1]))));
   const buildings=[];
   drawnBuildings=buildings;
   visible=0;
@@ -302,6 +307,7 @@ function display(next) {
   entries.forEach(([value,detail,delta],i)=>{
     stats[i][1].textContent=value;
     stats[i][2].textContent=detail;
+    stats[i][0].setAttribute("aria-label",stats[i][3]+" "+value);
     stats[i][2].className=delta>0?"positive":delta<0?"negative":"";
   });
   catalog.world.metrics.forEach((metric,i)=>{
@@ -309,6 +315,7 @@ function display(next) {
     metrics[i][1].textContent=(value/10).toFixed(1)+metric.unit+" / "+metric.target/10+metric.unit;
     metrics[i][2].value=value-metric.initial;
   });
+  $("engineering").hidden=!next.site.planetaryEngineering;
   const unlocked=new Set(next.unlocked);
   const available=new Set(next.allowedBuildings);
   catalog.research.forEach((t,i)=>{
@@ -358,6 +365,7 @@ function applyTileEdit(edit) {
   if(edit.type) setOwner(index,edit.width,edit.height,index+1);
 }
 async function syncMap() {
+  await useEnvironmentSprites(state.site.kind);
   if(surfaceRevision!==state.worldRevision) {
     const terrain=await fetch("/api/surface",{cache:"no-store"});
     if(!terrain.ok) throw new Error("Could not load geology.");
@@ -443,8 +451,8 @@ async function poll() {
   setTimeout(poll,650);
 }
 const inside=([x,y])=> {
-  const {edge,size:span}=state.site;
-  return x>=edge && y>=edge && x<edge+span && y<edge+span;
+  const {left,top,width,height}=state.site;
+  return x>=left && y>=top && x<left+width && y<top+height;
 };
 function inspectTile([x,y]) {
   if(!grid || !inside([x,y])) return;
@@ -467,6 +475,27 @@ function updateInfo(info) {
   const tile=selected?selected[1]*size+selected[0]:-1;
   if(!info || !state.started || mode!==0 || owners?.[tile]!==info.index+1) {box.hidden=true;return;}
   const recipe=catalog.buildings[info.type-1];
+  $("infoDescription").textContent=recipe.description;
+  const assembly=$("shipAssembly");
+  assembly.hidden=recipe.spaceRole!=="assembly" || state.stress;
+  if(!assembly.hidden) {
+    const select=$("shipType");
+    const render=()=>{
+      const type=catalog.shipTypes.find(item=>item.id===(info.assembly?.type ?? select.value));
+      select.disabled=Boolean(info.assembly);
+      $("beginAssembly").disabled=Boolean(info.assembly) || !info.assemblyReady || !type;
+      $("assemblyStatus").textContent=info.assembly
+        ? type.name+" · "+info.assembly.ticksLeft+" ticks remaining"+(info.assemblyReady?"":" · Paused")
+        : type ? formatAmounts(type.cost)+" · "+type.buildTicks+" ticks · "+type.payload+" cargo · "+type.fuelPercent+"% fuel"+
+          (info.assemblyReady?"":" · Requires an operating yard and cargo facility") : "";
+    };
+    select.onchange=render;
+    assembly.onsubmit=event=>{
+      event.preventDefault();
+      command("assemble",{index:info.index,shipType:select.value});
+    };
+    render();
+  }
   $("infoName").textContent=recipe.name+(recipe.upgrades.length?" · Level "+info.level:"");
   const lines=[(info.disabled?"Shut down":info.running?"Operating":"Idle")+" · "+info.width+"×"+info.height+" tiles",
     "Workers "+info.workers+" / "+info.crew];
@@ -622,25 +651,42 @@ $("file").onchange=async event=>{
     await command("import",{save:JSON.parse(await file.text())});
   } catch(error) { notice(error.message,true); }
 };
-async function loadSprite(building) {
-  const template=Sprites.buildings[Math.max(0,Sprites.art.indexOf(building.art))];
-  if(!building.image) return template;
+async function loadSprite(building,path=building.image,fallback=null) {
+  const template=fallback ?? Sprites.buildings[Math.max(0,Sprites.art.indexOf(building.art))];
+  if(!path) return template;
   const image=new Image();
-  image.src=building.image+"?v=map-4";
+  image.src=path;
   try { await image.decode(); }
-  catch { console.warn("Could not load building PNG:",building.image);return template; }
+  catch { console.warn("Could not load building PNG:",path);return template; }
   const sprite=Object.assign(document.createElement("canvas"),{width:96,height:100});
   const fit=Math.min(96/image.naturalWidth,100/image.naturalHeight);
   const w=image.naturalWidth*fit,h=image.naturalHeight*fit;
   sprite.getContext("2d").drawImage(image,(96-w)/2,100-h,w,h);
   return sprite;
 }
+async function useEnvironmentSprites(kind) {
+  const environment=kind==="orbit" || kind==="asteroid" ? kind : "planet";
+  if(environment===spriteEnvironment) return;
+  if(!environmentSprites.has(environment)) {
+    const planet=environmentSprites.get("planet");
+    const sprites=await Promise.all(catalog.buildings.map((building,i)=>
+      loadSprite(building,building.environmentImages[environment] ?? "",planet.sprites[i])));
+    environmentSprites.set(environment,{sprites,masks:spriteMasks(sprites)});
+  }
+  ({sprites:buildingSprites,masks}=environmentSprites.get(environment));
+  spriteEnvironment=environment;
+  Array.from($("builds").children).forEach((button,i)=>button.firstElementChild.src=buildingSprites[i].toDataURL());
+}
+
+const spriteMasks=sprites=>sprites.map(sprite=>sprite.getContext("2d").getImageData(0,0,96,100).data);
 async function initialize() {
   try {
     const response=await fetch("/api/catalog",{cache:"no-store"});
     if(!response.ok) throw new Error("Catalog unavailable");
     catalog=await response.json();
-    stats=[...catalog.materials.map(m=>m.name),"Power margin","Battery","Colonists"].map(makeStats);
+    const icons={ore:"◆",water:"◈",food:"✿",alloy:"▰",research:"⚗",silicon:"◇",titanium:"⬡",brine:"≋",uranium:"☢",propellant:"↑"};
+    stats=[...catalog.materials.map(m=>[m.name,icons[m.id] ?? m.symbol]),
+      ["Power margin","⚡"],["Battery","▣"],["Colonists","♟"]].map(([name,icon])=>makeStats(name,icon));
     metrics=catalog.world.metrics.map(makeMetric);
     techCards=catalog.research.map(t=>{
       const card=document.createElement("div");
@@ -656,12 +702,14 @@ async function initialize() {
     });
     for(const material of catalog.materials)
       $("testerMaterial").add(new Option(material.name,material.id));
+    for(const type of catalog.shipTypes) $("shipType").add(new Option(type.name,type.id));
     const deposits=catalog.world.deposits.map((d,index)=>({...d,index:index+1}));
     [buildingSprites,tileSprites]=await Promise.all([
-      Promise.all(catalog.buildings.map(loadSprite)),
+      Promise.all(catalog.buildings.map(building=>loadSprite(building))),
       Sprites.makeTiles(deposits)
     ]);
-    masks=buildingSprites.map(sprite=>sprite.getContext("2d").getImageData(0,0,96,100).data);
+    masks=spriteMasks(buildingSprites);
+    environmentSprites.set("planet",{sprites:buildingSprites,masks});
     deposits.forEach(d=>{
       const key=document.createElement("span");
       key.style.color=d.colors[0];
