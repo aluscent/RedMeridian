@@ -107,7 +107,8 @@ sealed partial class Colony
             ratedPowerOutput = OutputPower(recipe), powerUse = running ? recipe.Power : 0,
             ratedPowerUse = recipe.Power, outputs = recipe.Outputs,
             width = (int)Widths[index], height = (int)Heights[index],
-            upgrade = level <= recipe.Upgrades.Length ? recipe.Upgrades[level - 1] : null
+            upgrade = level <= recipe.Upgrades.Length ? recipe.Upgrades[level - 1] : null,
+            weatherForecast = weatherForecasts.GetValueOrDefault(index)
         };
     }
 
@@ -176,6 +177,7 @@ sealed partial class Colony
         int i = Grid[index] - 1;
         if (!disabled.Remove(index)) Group(index).Remove(index);
         levels.Remove(index);
+        weatherForecasts.Remove(index);
         Grid[index] = 0;
         counts[i]--;
         surface.Clear(index);

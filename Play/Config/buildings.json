@@ -614,5 +614,19 @@
       "width": 2,
       "height": 2
     }
+  },
+  {
+    "id": 28,
+    "name": "Weather Observatory",
+    "category": "Research",
+    "art": "lab",
+    "image": "assets/research-lab.png",
+    "cost": {
+      "alloy": 8
+    },
+    "power": 2,
+    "crew": 1,
+    "priority": 28,
+    "forecastsWeather": true
   }
 ]

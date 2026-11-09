@@ -7,6 +7,7 @@ var rules = new GameRules(Path.Combine(AppContext.BaseDirectory, "Config"));
     ("Footprint ownership and map boundaries", FootprintOwnership),
     ("Area build rejects unaffordable orders without partial edits", AreaBuildIsAtomic),
     ("Starter colony produces resources and loses solar output during storms", StarterProduction),
+    ("Observatory narrows forecasts and preserves the last reading when offline", WeatherObservatory),
     ("Current saves preserve map edits, upgrades, and shutdowns", CurrentSaveRoundTrip),
     ("Legacy saves preserve the original footprint and resources", LegacySave),
     ("Overlapping structures in a save are rejected", InvalidSave)
@@ -110,6 +111,34 @@ void CurrentSaveRoundTrip()
     Equal<string?>(null, restored.Map.Paint[1]);
     Equal(new SavedStructure(0, Level: 2, Disabled: true), restored.Structures!.Single(s => s.Index == 0));
     foreach (var (id, amount) in saved.Materials!) Equal(amount, restored.Materials![id]);
+}
+
+void WeatherObservatory()
+{
+    var observatory = rules.Buildings.Single(b => b.ForecastsWeather);
+    var solar = rules.Buildings.Single(b => b.Art == "solar");
+    var colony = new Colony(rules, empty: true);
+    colony.Build(0, solar.Id);
+    colony.Build(1, observatory.Id);
+    Equal<Dictionary<int,WeatherForecast>?>(null, colony.Export().WeatherForecasts);
+    colony.Step();
+    var early = colony.Export().WeatherForecasts![1];
+    Equal((long)solar.StormGeneration!.Value, early.StormSolarOutput);
+    Equal<long?>(null, early.BatteryTicks);
+    var preStorm = Colony.Restore(rules, colony.Export() with { Tick = rules.World.Storm.Start - 2 });
+    preStorm.Step();
+    var latest = preStorm.Export().WeatherForecasts![1];
+    Equal(1L, latest.StartsInMin);
+    Equal(1L, latest.StartsInMax);
+    Equal((long)(rules.World.Storm.End - rules.World.Storm.Start), latest.DurationMin);
+    Equal(true, early.StartsInMax - early.StartsInMin > latest.StartsInMax - latest.StartsInMin);
+    preStorm.Toggle(1);
+    preStorm.Step();
+    var restored = Colony.Restore(rules, preStorm.Export());
+    Equal(latest, restored.Export().WeatherForecasts![1]);
+    Equal(true, restored.Export().Tick > latest.ObservedAt);
+    restored.Remove(1);
+    Equal<Dictionary<int,WeatherForecast>?>(null, restored.Export().WeatherForecasts);
 }
 
 void LegacySave()

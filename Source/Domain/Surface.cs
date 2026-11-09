@@ -71,6 +71,7 @@ sealed class ProductionGroup(Building building)
     public Building Building { get; } = building;
     public int Count => members.Count;
     public int Active { get; set; }
+    public IEnumerable<int> ActiveMembers => members.Take(Active);
 
     public void Add(int index)
     {

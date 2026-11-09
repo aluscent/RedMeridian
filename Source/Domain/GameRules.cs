@@ -36,6 +36,7 @@ sealed record Building
     public int ChargeRate { get; init; }
     public int DischargeRate { get; init; }
     public int Priority { get; init; } = 70;
+    public bool ForecastsWeather { get; init; }
     public string? Deposit { get; init; }
     public string? Research { get; init; }
 }

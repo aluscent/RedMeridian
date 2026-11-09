@@ -20,6 +20,14 @@ agreement and a save/load round trip. It starts its own server on a temporary
 local port and uses a separate save directory. GitHub Actions runs the suite
 and checks JavaScript syntax on pushes and pull requests.
 
+## Forecast dust storms
+
+Build a **Weather Observatory** from the Research category and inspect it after
+it has operated for a tick. The forecast narrows as the next storm approaches.
+Battery cover uses recorded demand, stored charge, and the storm output of
+generators that run without fuel or crew. An offline observatory keeps its last
+reading, including its original observation tick.
+
 ## Generate, edit, or load a map
 
 The launch screen previews the geology before the colony clock starts.

@@ -4,7 +4,8 @@ namespace RedMeridian.Domain;
 
 record SaveData(int Version, int[][]? Tiles, long[]? Stock, int Population, long Tick, int[]? Planet,
     Dictionary<string,long>? Materials = null, Dictionary<string,int>? Metrics = null, long Charge = 0,
-    MapSettings? Map = null, SavedStructure[]? Structures = null);
+    MapSettings? Map = null, SavedStructure[]? Structures = null,
+    Dictionary<int,WeatherForecast>? WeatherForecasts = null);
 
 
 sealed partial class Colony
@@ -20,6 +21,7 @@ sealed partial class Colony
     readonly HashSet<int> disabled = new();
     readonly ProductionGroup[][] groups;
     readonly ProductionGroup[] producers, consumers, batteries;
+    readonly ProductionGroup[] observatories;
     public MapSettings MapSettings => surface.Settings;
     public byte[] Widths => surface.Widths;
     public byte[] Heights => surface.Heights;
@@ -52,6 +54,7 @@ sealed partial class Colony
         consumers = allGroups.Where(g => g.Building.Generation == 0 && g.Building.Storage == 0)
             .OrderBy(g => g.Building.Priority).ToArray();
         batteries = allGroups.Where(g => g.Building.Storage > 0).ToArray();
+        observatories = consumers.Where(g => g.Building.ForecastsWeather).ToArray();
         stock = rules.Materials.ToDictionary(m => m.Id, m => m.Initial);
         delta = rules.Materials.ToDictionary(m => m.Id, _ => 0L);
         planet = rules.World.Metrics.ToDictionary(m => m.Id, m => m.Initial);
@@ -125,6 +128,7 @@ sealed partial class Colony
         power.Settle(generated,used);
         crewUsed = population * rules.World.CrewPerColonist - crew;
         UpdatePopulation();
+        RecordWeatherForecasts();
         foreach (var material in rules.Materials) delta[material.Id] += stock[material.Id];
 
         stepTimes.Enqueue(Stopwatch.GetElapsedTime(start).TotalMilliseconds);

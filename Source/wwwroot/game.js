@@ -447,6 +447,22 @@ function updateInfo(info) {
   if(info.ratedPowerOutput) lines.push("Power output "+info.powerOutput+" / "+info.ratedPowerOutput);
   if(info.ratedPowerUse) lines.push("Power draw "+info.powerUse+" / "+info.ratedPowerUse);
   if(Object.keys(info.outputs).length) lines.push("Yield "+formatAmounts(info.outputs)+" / operating tick");
+  if(recipe.forecastsWeather) {
+    const forecast=info.weatherForecast;
+    if(!forecast) lines.push("Forecast pending. Requires power and crew.");
+    else {
+      const age=state.tick-forecast.observedAt;
+      const range=(min,max)=>min===max ? String(min) : min+"–"+max;
+      lines.push(age || !info.running
+        ? "Stale forecast · recorded at tick "+forecast.observedAt+" ("+age+" ticks ago)"
+        : "Forecast recorded at tick "+forecast.observedAt);
+      lines.push("Next storm: "+range(forecast.startsInMin,forecast.startsInMax)+" ticks from reading");
+      lines.push("Expected duration: "+range(forecast.durationMin,forecast.durationMax)+" ticks");
+      lines.push("Storm solar: "+forecast.stormSolarOutput+" / "+forecast.demand+" total demand");
+      lines.push(forecast.batteryTicks===null ? "Battery backup unnecessary at recorded demand"
+        : "Estimated battery cover: "+forecast.batteryTicks+" full ticks");
+    }
+  }
   $("infoDetails").textContent=lines.join("\n");
   $("toggleBuilding").textContent=info.disabled?"Enable":"Shut down";
   $("toggleBuilding").onclick=()=>command("toggle",{index:info.index});

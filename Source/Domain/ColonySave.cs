@@ -18,7 +18,8 @@ sealed partial class Colony
             if (Widths[index] != 1 || Heights[index] != 1 || level != 1 || off)
                 structures.Add(new(index,Widths[index],Heights[index],level,off));
         }
-        return new(4,tiles.ToArray(),null,population,tick,null,new(stock),new(planet),power.Charge,MapSettings,structures.ToArray());
+        return new(4,tiles.ToArray(),null,population,tick,null,new(stock),new(planet),power.Charge,MapSettings,structures.ToArray(),
+            weatherForecasts.Count == 0 ? null : new(weatherForecasts));
     }
 
     public static Colony Restore(GameRules rules,SaveData? save)
@@ -51,6 +52,20 @@ sealed partial class Colony
         }
 
         if (structures.Count > 0) throw new InvalidOperationException("Structure metadata has no matching tile.");
+        if (save.Version == 4 && save.WeatherForecasts is not null)
+        {
+            foreach (var (index, forecast) in save.WeatherForecasts)
+            {
+                if ((uint)index >= colony.Grid.Length || colony.Grid[index] == 0 ||
+                    !rules.Buildings[colony.Grid[index] - 1].ForecastsWeather ||
+                    forecast is null || forecast.ObservedAt < 0 || forecast.ObservedAt > save.Tick ||
+                    forecast.StartsInMin < 1 || forecast.StartsInMax < forecast.StartsInMin ||
+                    forecast.DurationMin < 1 || forecast.DurationMax < forecast.DurationMin ||
+                    forecast.StormSolarOutput < 0 || forecast.Demand < 0 || forecast.BatteryTicks < 0)
+                    throw new InvalidOperationException("Invalid weather observation in colony save.");
+                colony.weatherForecasts.Add(index, forecast);
+            }
+        }
 
         void Material(string id,long amount)
         {
