@@ -312,9 +312,17 @@ function display(next) {
   const unlocked=new Set(next.unlocked);
   const available=new Set(next.allowedBuildings);
   catalog.research.forEach((t,i)=>{
-    techCards[i].classList.toggle("positive",unlocked.has(t.id));
-    techCards[i].lastElementChild.textContent=unlocked.has(t.id)?"Unlocked":
-      t.points+" RP"+(t.requires.length?" · "+t.requires.map(id=>catalog.research.find(other=>other.id===id).name).join(", "):"");
+    const [card,detail,button]=techCards[i];
+    const active=unlocked.has(t.id);
+    const missing=t.requires.filter(id=>!unlocked.has(id));
+    const points=next.stock[catalog.world.researchMaterial];
+    const requirements=missing.map(id=>catalog.research.find(other=>other.id===id).name);
+    card.classList.toggle("positive",active);
+    button.hidden=active;
+    button.disabled=points<t.points || missing.length>0;
+    detail.textContent=active?"Active":
+      number.format(points)+" / "+number.format(t.points)+" RP"+
+      (requirements.length?" · Activate first: "+requirements.join(", "):"");
   });
   Array.from($("builds").children).forEach((button,i)=>{
     const id=catalog.buildings[i].research;
@@ -332,6 +340,8 @@ function display(next) {
   $("mission").textContent=next.complete?"Terraforming targets met":next.shortage?"Life support shortage":
     next.unlocked.length===0?"Build a lab to unlock new facilities":"Research and terraforming underway";
   $("tick").textContent=next.tickMs.toFixed(3)+" ms";
+  $("testerTools").hidden=!next.developerMode;
+  $("openLogistics").disabled=next.stress;
   $("stress").textContent=next.stress?"Return to colony":"Load 100k stress map";
   $("sweep").hidden=!next.stress;
   if(redraw) requestDraw();
@@ -571,6 +581,23 @@ $("inspectMode").onclick=()=>chooseMode(0);
 $("salvage").onclick=()=>chooseMode(-1);
 $("area").onclick=()=>setArea(!areaMode);
 for(const action of ["save","pause","speed","stress"]) $(action).onclick=()=>command(action);
+$("openLogistics").onclick=()=>{
+  const panel=$("logistics");
+  panel.open=true;
+  panel.scrollIntoView({block:"start"});
+  panel.querySelector("summary").focus({preventScroll:true});
+};
+$("logistics").addEventListener("toggle",()=> {
+  $("openLogistics").setAttribute("aria-expanded",String($("logistics").open));
+});
+$("testerGrant").onsubmit=event=>{
+  event.preventDefault();
+  command("tester-grant",{material:$("testerMaterial").value,amount:Number($("testerAmount").value)});
+};
+$("testerStep").onsubmit=event=>{
+  event.preventDefault();
+  command("tester-step",{amount:Number($("testerTicks").value)});
+};
 $("sweep").onclick=()=>{
   $("sweep").disabled=true;
   frameTimes.length=drawTimes.length=0;
@@ -618,10 +645,17 @@ async function initialize() {
     techCards=catalog.research.map(t=>{
       const card=document.createElement("div");
       card.textContent=t.name;
-      card.append(document.createElement("small"));
+      const detail=document.createElement("small"), button=document.createElement("button");
+      button.type="button";
+      button.textContent="Activate";
+      button.setAttribute("aria-label","Activate "+t.name);
+      button.onclick=()=>command("activate-research",{technology:t.id});
+      card.append(detail,button);
       $("research").append(card);
-      return card;
+      return [card,detail,button];
     });
+    for(const material of catalog.materials)
+      $("testerMaterial").add(new Option(material.name,material.id));
     const deposits=catalog.world.deposits.map((d,index)=>({...d,index:index+1}));
     [buildingSprites,tileSprites]=await Promise.all([
       Promise.all(catalog.buildings.map(loadSprite)),

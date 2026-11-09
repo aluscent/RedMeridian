@@ -5,7 +5,8 @@ namespace RedMeridian.Domain;
 record SaveData(int Version, int[][]? Tiles, long[]? Stock, int Population, long Tick, int[]? Planet,
     Dictionary<string,long>? Materials = null, Dictionary<string,int>? Metrics = null, long Charge = 0,
     MapSettings? Map = null, SavedStructure[]? Structures = null,
-    Dictionary<int,WeatherForecast>? WeatherForecasts = null, SpaceSave? Space = null);
+    Dictionary<int,WeatherForecast>? WeatherForecasts = null, SpaceSave? Space = null,
+    string[]? ActivatedResearch = null);
 
 
 sealed partial class Colony
@@ -20,6 +21,7 @@ sealed partial class Colony
     readonly Surface surface;
     readonly Dictionary<int,int> levels = new();
     readonly HashSet<int> disabled = new();
+    readonly HashSet<string> activatedResearch = new();
     readonly ProductionGroup[][] groups;
     readonly ProductionGroup[] producers, consumers, batteries;
     readonly ProductionGroup[] observatories;
@@ -189,16 +191,31 @@ sealed partial class Colony
         demand = consumers.Sum(g => (long)g.Count * g.Building.Power);
     }
 
-    public object Status(int revision,bool stress,bool paused,int speed,bool started = true,bool hasSave = false,int worldRevision = 0,int inspect = -1) => new
+    public string ActivateResearch(string? id)
     {
-        revision, stress, paused, speed, tick, started, hasSave, worldRevision, site = Site, allowedBuildings,
+        var milestone = rules.Research.FirstOrDefault(item => item.Id == id)
+            ?? throw new InvalidOperationException("Select a research milestone.");
+        if (activatedResearch.Contains(milestone.Id))
+            throw new InvalidOperationException("This milestone is already active.");
+        if (stock[rules.World.ResearchMaterial] < milestone.Points)
+            throw new InvalidOperationException($"Requires {milestone.Points} research points.");
+        if (!milestone.Requires.All(activatedResearch.Contains))
+            throw new InvalidOperationException("Activate the prerequisite milestones first.");
+        activatedResearch.Add(milestone.Id);
+        return $"{milestone.Name} activated.";
+    }
+
+    public object Status(int revision,bool stress,bool paused,int speed,bool started = true,bool hasSave = false,
+        int worldRevision = 0,int inspect = -1,bool developerMode = false) => new
+    {
+        revision, stress, paused, speed, tick, started, hasSave, worldRevision, developerMode, site = Site, allowedBuildings,
         inspected = Inspect(inspect), stock = new Dictionary<string,long>(stock),
         delta = new Dictionary<string,long>(delta), population, housing,
         supply = generated, demand, used, crewUsed, crewCapacity = population * rules.World.CrewPerColonist,
         batteryCharge = power.Charge, batteryCapacity = power.Capacity, batteryAvailable = power.Available,
         shortage, storm = Storm, planet = new Dictionary<string,int>(planet),
         complete = rules.World.Metrics.All(m => planet[m.Id] >= m.Target),
-        unlocked = rules.Research.Where(t => rules.Unlocked(t.Id,stock[rules.World.ResearchMaterial])).Select(t => t.Id).ToArray(),
+        unlocked = activatedResearch.ToArray(),
         counts = counts.ToArray(), active = groups.Select(group => group.Sum(g => g.Active)).ToArray(), total = counts.Sum(),
         tickMs = stepTimes.Count == 0 ? 0 : stepTimes.Order().ElementAt((int)Math.Ceiling(stepTimes.Count * .95) - 1)
     };

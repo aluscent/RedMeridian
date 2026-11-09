@@ -32,7 +32,7 @@ reading, including its original observation tick.
 
 1. On Mars, build and power a **Space communications relay**, a **Spacecraft
    assembly yard**, and a **Surface cargo terminal**. Produce propellant.
-2. Open **Space logistics** below the map. Assemble a spacecraft for 16 alloy,
+2. Click **Space travel** above the map to open **Space logistics**. Assemble a spacecraft for 16 alloy,
    choose a destination, and load up to 60 units. A founding mission also costs
    24 alloy and installs solar power, a habitat, communications, and a dock or
    terminal. Pack food, water, alloy for new facilities, and return propellant.
@@ -46,6 +46,20 @@ reading, including its original observation tick.
 All bases advance together. Cargo remains aboard if the destination's dock is
 offline or storage is full. Saving captures all bases, spacecraft, and routes.
 Older single-colony saves open on Mars with an empty fleet.
+
+## Activate research milestones
+
+Research Labs generate research points. Open **Research milestones** and click
+**Activate** when the colony has enough points and its prerequisites are active.
+Activation uses the points as a threshold. Each base tracks its own milestones.
+Older saves retain the milestones they had already unlocked.
+
+## Tester mode
+
+Run **Start Red Meridian Tester.cmd** and open http://127.0.0.1:5288/.
+The **Tester tools** section contains resource grants, manual tick advancement,
+the 100,000-structure stress map, and its pan test. Tester mode defaults to
+`colony.test.json` in the save directory, while normal play uses `colony.json`.
 
 ## Generate, edit, or load a map
 

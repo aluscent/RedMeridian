@@ -1,4 +1,6 @@
 using RedMeridian.Domain;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 
 var rules = new GameRules(Path.Combine(AppContext.BaseDirectory, "Config"));
 (string Name, Action Run)[] tests =
@@ -10,6 +12,8 @@ var rules = new GameRules(Path.Combine(AppContext.BaseDirectory, "Config"));
     ("Observatory narrows forecasts and preserves the last reading when offline", WeatherObservatory),
     ("Spacecraft found bases, retain blocked cargo, and restore without duplicate delivery", SpaceLogistics),
     ("Recurring routes respect reserves and avoid counting inbound cargo twice", RecurringCargo),
+    ("Research requires explicit activation and preserves legacy unlocks", ResearchActivation),
+    ("Tester commands are gated by server configuration", TesterCommands),
     ("Current saves preserve map edits, upgrades, and shutdowns", CurrentSaveRoundTrip),
     ("Legacy saves preserve the original footprint and resources", LegacySave),
     ("Overlapping structures in a save are rejected", InvalidSave)
@@ -226,6 +230,54 @@ void LegacySave()
     Equal((byte)1, colony.Heights[0]);
     Equal(31L, colony.Export().Materials!["ore"]);
     Equal(12L, colony.Export().Tick);
+}
+
+void ResearchActivation()
+{
+    var initial = new Colony(rules, empty: true).Export();
+    var milestone = rules.Research.First(item => item.Requires.Length == 0 && item.Points > 0 &&
+        rules.Buildings.Any(b => b.Research == item.Id && b.Deposit is null));
+    var building = rules.Buildings.First(b => b.Research == milestone.Id && b.Deposit is null);
+    foreach (var (id, amount) in building.Cost) initial.Materials![id] = amount;
+    var colony = Colony.Restore(rules, initial);
+    Reject(() => colony.ActivateResearch(milestone.Id));
+    long points = rules.Research.Max(item => item.Points);
+    initial.Materials![rules.World.ResearchMaterial] = points;
+    colony = Colony.Restore(rules, initial);
+    Equal(0, colony.Export().ActivatedResearch!.Length);
+    Reject(() => colony.Build(0, building.Id));
+    var dependent = rules.Research.First(item => item.Requires.Length > 0);
+    Reject(() => colony.ActivateResearch(dependent.Id));
+    colony.ActivateResearch(milestone.Id);
+    Reject(() => colony.ActivateResearch(milestone.Id));
+    Equal(points, colony.Stock(rules.World.ResearchMaterial));
+    var restored = Colony.Restore(rules, colony.Export());
+    Equal(milestone.Id, restored.Export().ActivatedResearch!.Single());
+    Equal(building.Id, restored.Build(0, building.Id).Edit.Type);
+    var legacy = Colony.Restore(rules, initial with { ActivatedResearch = null });
+    Equal(true, legacy.Export().ActivatedResearch!.Contains(milestone.Id));
+}
+
+void TesterCommands()
+{
+    static int? Code(IResult result) => ((IStatusCodeHttpResult)result).StatusCode;
+    var normal = new ColonySession(rules, new ConfigurationBuilder().Build());
+    Equal<int?>(200, Code(normal.Apply(new("new"))));
+    Equal<int?>(400, Code(normal.Apply(new("stress"))));
+    Equal<int?>(400, Code(normal.Apply(new("tester-grant", Revision: 1, Material: "alloy", Amount: 100))));
+    Equal<int?>(400, Code(normal.Apply(new("tester-step", Amount: 2))));
+
+    var developer = new ConfigurationBuilder()
+        .AddInMemoryCollection(new Dictionary<string,string?> { ["developer"] = "true" }).Build();
+    var tester = new ColonySession(rules, developer);
+    Equal<int?>(200, Code(tester.Apply(new("new"))));
+    Equal<int?>(200, Code(tester.Apply(new("tester-grant", Revision: 1, Material: "alloy", Amount: 100))));
+    Equal<int?>(200, Code(tester.Apply(new("tester-step", Amount: 2))));
+    using var status = System.Text.Json.JsonSerializer.SerializeToDocument(tester.Read(-1));
+    Equal(true, status.RootElement.GetProperty("developerMode").GetBoolean());
+    Equal(true, status.RootElement.GetProperty("paused").GetBoolean());
+    Equal(2L, status.RootElement.GetProperty("tick").GetInt64());
+    Equal<int?>(200, Code(tester.Apply(new("stress"))));
 }
 
 void InvalidSave()

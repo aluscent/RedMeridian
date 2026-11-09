@@ -39,15 +39,15 @@ async Task TickLoop(ColonySession session, CancellationToken cancellation)
 
 record Command(string? Action, int Index = -1, int Type = 0, int Revision = -1, SaveData? Save = null,
     int EndIndex = -1, MapSettings? Map = null, string? Base = null, int Ship = 0,
-    Dictionary<string,long>? Cargo = null, CargoRoute? Route = null);
+    Dictionary<string,long>? Cargo = null, CargoRoute? Route = null, string? Technology = null,
+    string? Material = null, int Amount = 0);
 
 
 sealed class ColonySession
 {
     readonly object gate = new();
-    readonly string path = Environment.GetEnvironmentVariable("RED_MERIDIAN_SAVE")
-        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "RedMeridian", "colony.json");
+    readonly string path;
+    readonly bool developerMode;
     readonly JsonSerializerOptions json = new(JsonSerializerDefaults.Web);
     readonly GameRules rules;
     int diskVersion;
@@ -59,15 +59,19 @@ sealed class ColonySession
     int speed = 1, revision, worldRevision;
     double progress;
 
-    public ColonySession(GameRules rules)
+    public ColonySession(GameRules rules, IConfiguration configuration)
     {
         this.rules = rules;
+        developerMode = string.Equals(configuration["developer"], "true", StringComparison.OrdinalIgnoreCase);
+        path = Environment.GetEnvironmentVariable("RED_MERIDIAN_SAVE")
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "RedMeridian", developerMode ? "colony.test.json" : "colony.json");
         program = new(rules, new Colony(rules));
     }
 
     Colony Current => stress ?? program.Base(selectedBase);
     object State(int inspect = -1) => Current.Status(revision,stress is not null,paused,speed,
-        started,File.Exists(path),worldRevision,inspect);
+        started,File.Exists(path),worldRevision,inspect,developerMode);
 
     public object Read(int inspect) { lock (gate) return State(inspect); }
     public MapSettings Surface() { lock (gate) return Current.MapSettings; }
@@ -110,11 +114,16 @@ sealed class ColonySession
             progress += Math.Min(seconds, 2) * speed;
             while (progress >= 2)
             {
-                if (stress is not null) stress.Step();
-                else program.Step();
+                StepSimulation();
                 progress -= 2;
             }
         }
+    }
+
+    void StepSimulation()
+    {
+        if (stress is not null) stress.Step();
+        else program.Step();
     }
 
     public IResult Apply(Command command)
@@ -178,11 +187,38 @@ sealed class ColonySession
                         message = $"Simulation speed {speed}×.";
                         break;
                     case "stress":
+                        RequireDeveloperMode();
                         stress = stress is null ? new Colony(rules,true) : null;
                         worldRevision++;
                         revision++;
                         progress = 0;
                         message = stress is null ? "Returned to your colony." : "Loaded 100,000 structures in a separate colony.";
+                        break;
+                    case "activate-research":
+                        if (command.Revision != revision) throw new InvalidOperationException("Base changed. Try again.");
+                        message = Current.ActivateResearch(command.Technology);
+                        edits = [];
+                        revision++;
+                        break;
+                    case "tester-grant":
+                        RequireDeveloperMode();
+                        if (command.Revision != revision) throw new InvalidOperationException("Base changed. Try again.");
+                        if (command.Material is not { } material || command.Amount is < 1 or > 100_000 ||
+                            !rules.Materials.Any(item => item.Id == material))
+                            throw new InvalidOperationException("Select a resource and an amount from 1 to 100,000.");
+                        var grant = new Dictionary<string,long> { [material] = command.Amount };
+                        if (!Current.CanReceive(grant)) throw new InvalidOperationException("Grant exceeds storage capacity.");
+                        Current.Receive(grant);
+                        message = $"Added {command.Amount} {material} to this base.";
+                        break;
+                    case "tester-step":
+                        RequireDeveloperMode();
+                        if (command.Amount is < 1 or > 100)
+                            throw new InvalidOperationException("Choose between 1 and 100 ticks.");
+                        paused = true;
+                        progress = 0;
+                        for (int i = 0; i < command.Amount; i++) StepSimulation();
+                        message = $"Advanced {command.Amount} ticks. Simulation paused.";
                         break;
                     case "save":
                         if (stress is not null) throw new InvalidOperationException("Return to your colony to save.");
@@ -232,6 +268,11 @@ sealed class ColonySession
             }
             return Results.Ok(new { message, edits, state = State() });
         }
+    }
+
+    void RequireDeveloperMode()
+    {
+        if (!developerMode) throw new InvalidOperationException("This command requires developer mode.");
     }
 
     string ApplyLogistics(Command command)

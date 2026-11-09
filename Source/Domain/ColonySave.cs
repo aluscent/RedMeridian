@@ -19,7 +19,7 @@ sealed partial class Colony
                 structures.Add(new(index,Widths[index],Heights[index],level,off));
         }
         return new(4,tiles.ToArray(),null,population,tick,null,new(stock),new(planet),power.Charge,MapSettings,structures.ToArray(),
-            weatherForecasts.Count == 0 ? null : new(weatherForecasts));
+            weatherForecasts.Count == 0 ? null : new(weatherForecasts), ActivatedResearch: activatedResearch.ToArray());
     }
 
     public static Colony Restore(GameRules rules,SaveData? save,ColonySite? site = null)
@@ -98,6 +98,22 @@ sealed partial class Colony
                 if (save.Planet is not { Length: 4 }) throw new InvalidOperationException("Invalid legacy planet metrics.");
                 for (int i = 0; i < LegacyMetrics.Length; i++) PlanetMetric(LegacyMetrics[i],save.Planet[i]);
             }
+        }
+        // Before activation was introduced, meeting a threshold unlocked the milestone immediately.
+        if (save.ActivatedResearch is null)
+        {
+            long points = colony.stock[rules.World.ResearchMaterial];
+            colony.activatedResearch.UnionWith(rules.Research.Where(item => rules.Unlocked(item.Id,points)).Select(item => item.Id));
+        }
+        else
+        {
+            var activated = save.ActivatedResearch;
+            if (activated.Length > rules.Research.Length || activated.Distinct().Count() != activated.Length ||
+                activated.Any(id => !rules.Research.Any(item => item.Id == id)))
+                throw new InvalidOperationException("Invalid activated research in colony save.");
+            colony.activatedResearch.UnionWith(activated);
+            if (activated.Any(id => !rules.Technology(id).Requires.All(colony.activatedResearch.Contains)))
+                throw new InvalidOperationException("An activated milestone is missing a prerequisite.");
         }
         colony.housing = rules.Buildings.Sum(b => colony.counts[b.Id - 1] * b.Beds);
         colony.RefreshCapacity();

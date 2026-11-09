@@ -157,8 +157,8 @@ sealed partial class Colony
 
     void CheckBuild(Building b,int count)
     {
-        if (b.Research is not null && !rules.Unlocked(b.Research,stock[rules.World.ResearchMaterial]))
-            throw new InvalidOperationException($"Requires {rules.Technology(b.Research).Name} research.");
+        if (b.Research is not null && !activatedResearch.Contains(b.Research))
+            throw new InvalidOperationException($"Activate {rules.Technology(b.Research).Name} in Research milestones first.");
         CheckCost(b.Cost,count,b.Name);
     }
 
