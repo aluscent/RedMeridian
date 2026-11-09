@@ -16,6 +16,7 @@ app.MapGet("/api/catalog", (GameRules rules) => new { rules.Buildings, rules.Mat
 app.MapGet("/api/state", (int? inspect, ColonySession session) => session.Read(inspect ?? -1));
 app.MapGet("/api/surface", (ColonySession session) => session.Surface());
 app.MapGet("/api/map", (HttpContext context, ColonySession session) => session.Map(context));
+app.MapGet("/api/logistics", (ColonySession session) => session.Logistics());
 app.MapPost("/api/command", (Command command, ColonySession session) => session.Apply(command));
 using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(250));
 var ticks = TickLoop(app.Services.GetRequiredService<ColonySession>(), app.Lifetime.ApplicationStopping);
@@ -37,7 +38,8 @@ async Task TickLoop(ColonySession session, CancellationToken cancellation)
 }
 
 record Command(string? Action, int Index = -1, int Type = 0, int Revision = -1, SaveData? Save = null,
-    int EndIndex = -1, MapSettings? Map = null);
+    int EndIndex = -1, MapSettings? Map = null, string? Base = null, int Ship = 0,
+    Dictionary<string,long>? Cargo = null, CargoRoute? Route = null);
 
 
 sealed class ColonySession
@@ -50,7 +52,8 @@ sealed class ColonySession
     readonly GameRules rules;
     int diskVersion;
     bool started;
-    Colony normal;
+    SpaceProgram program;
+    string selectedBase = ColonySite.Mars.Id;
     Colony? stress;
     bool paused;
     int speed = 1, revision, worldRevision;
@@ -59,19 +62,21 @@ sealed class ColonySession
     public ColonySession(GameRules rules)
     {
         this.rules = rules;
-        normal = new Colony(rules);
+        program = new(rules, new Colony(rules));
     }
 
-    Colony Current => stress ?? normal;
+    Colony Current => stress ?? program.Base(selectedBase);
     object State(int inspect = -1) => Current.Status(revision,stress is not null,paused,speed,
         started,File.Exists(path),worldRevision,inspect);
 
     public object Read(int inspect) { lock (gate) return State(inspect); }
     public MapSettings Surface() { lock (gate) return Current.MapSettings; }
+    public object Logistics() { lock (gate) return program.Summary(); }
 
-    void Open(Colony colony)
+    void Open(SpaceProgram loaded)
     {
-        normal = colony;
+        program = loaded;
+        selectedBase = ColonySite.Mars.Id;
         stress = null;
         started = true;
         paused = false;
@@ -105,7 +110,8 @@ sealed class ColonySession
             progress += Math.Min(seconds, 2) * speed;
             while (progress >= 2)
             {
-                Current.Step();
+                if (stress is not null) stress.Step();
+                else program.Step();
                 progress -= 2;
             }
         }
@@ -124,13 +130,13 @@ sealed class ColonySession
                 switch (command.Action)
                 {
                     case "new":
-                        Open(new Colony(rules,map: command.Map));
+                        Open(new(rules, new Colony(rules,map: command.Map)));
                         message = "Landed on the generated map.";
                         break;
                     case "load":
                         if (!File.Exists(path)) throw new InvalidOperationException("No saved colony on disk.");
                         var saved = JsonSerializer.Deserialize<SaveData>(File.ReadAllText(path),json);
-                        Open(Colony.Restore(rules,saved));
+                        Open(SpaceProgram.Restore(rules,saved));
                         diskVersion = saved!.Version;
                         message = "Saved colony loaded.";
                         break;
@@ -180,16 +186,36 @@ sealed class ColonySession
                         break;
                     case "save":
                         if (stress is not null) throw new InvalidOperationException("Return to your colony to save.");
-                        Persist(normal);
+                        Persist(program);
                         message = "Colony saved to disk.";
                         break;
                     case "import":
                         if (stress is not null) throw new InvalidOperationException("Return to your colony to import.");
                         if (command.Revision != revision) throw new InvalidOperationException("Map changed. Try importing again.");
-                        var imported = Colony.Restore(rules,command.Save);
+                        var imported = SpaceProgram.Restore(rules,command.Save);
                         Persist(imported);
                         Open(imported);
                         message = "Colony imported and saved.";
+                        break;
+                    case "select-base":
+                    case "assemble":
+                    case "dispatch":
+                    case "set-route":
+                    case "clear-route":
+                        if (stress is not null) throw new InvalidOperationException("Return to your colony to use logistics.");
+                        if (command.Revision != revision) throw new InvalidOperationException("Base changed. Try again.");
+                        if (command.Action == "select-base")
+                        {
+                            selectedBase = program.Base(command.Base).Site.Id;
+                            worldRevision++;
+                            message = $"Viewing {Current.Site.Name}.";
+                        }
+                        else
+                        {
+                            message = ApplyLogistics(command);
+                            edits = [];
+                        }
+                        revision++;
                         break;
                     default:
                         throw new InvalidOperationException("Unknown command.");
@@ -208,7 +234,26 @@ sealed class ColonySession
         }
     }
 
-    void Persist(Colony colony)
+    string ApplyLogistics(Command command)
+    {
+        switch (command.Action)
+        {
+            case "assemble":
+                program.Assemble(Current);
+                return "Spacecraft assembled.";
+            case "dispatch":
+                program.Dispatch(Current, command.Ship, command.Base, command.Cargo);
+                return "Spacecraft launched.";
+            case "set-route":
+                program.SetRoute(command.Route ?? throw new InvalidOperationException("Provide a cargo route."));
+                return "Recurring cargo route configured.";
+            default:
+                program.ClearRoute(command.Ship);
+                return "Recurring route cleared.";
+        }
+    }
+
+    void Persist(SpaceProgram colony)
     {
         var fullPath = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);

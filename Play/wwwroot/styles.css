@@ -1,6 +1,13 @@
 :root{color-scheme:dark;--bg:#171411;--panel:#211c18;--line:#413228;--text:#f7e7d5;--muted:#c1ab97;--accent:#ffb676;--green:#c5dfa0;--mono:ui-monospace,Consolas,monospace}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
+.logistics{display:grid;gap:10px;padding:10px;font-size:13px}
+.logistics form,.logistics fieldset,#cargoInputs{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.logistics fieldset,.logistics p,.logistics ul{margin:0}
+.logistics-table{overflow:auto}
+.logistics table{border-collapse:collapse;white-space:nowrap}
+.logistics th,.logistics td{padding:5px 8px;text-align:left;border-bottom:1px solid var(--line)}
+.logistics input{width:6em}
 body{margin:0;color:var(--text);background:radial-gradient(ellipse at 25% 0%,#2f221a,var(--bg) 65%);font:14px system-ui,sans-serif}
 header,main,footer{max-width:1560px;margin:auto;padding-inline:clamp(12px,3vw,38px)}
 header,footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-block:16px}

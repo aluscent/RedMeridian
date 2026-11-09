@@ -5,7 +5,7 @@ namespace RedMeridian.Domain;
 record SaveData(int Version, int[][]? Tiles, long[]? Stock, int Population, long Tick, int[]? Planet,
     Dictionary<string,long>? Materials = null, Dictionary<string,int>? Metrics = null, long Charge = 0,
     MapSettings? Map = null, SavedStructure[]? Structures = null,
-    Dictionary<int,WeatherForecast>? WeatherForecasts = null);
+    Dictionary<int,WeatherForecast>? WeatherForecasts = null, SpaceSave? Space = null);
 
 
 sealed partial class Colony
@@ -16,6 +16,7 @@ sealed partial class Colony
     readonly GameRules rules;
     public byte[] Grid { get; } = new byte[Size * Size];
     readonly int[] counts;
+    readonly int[] allowedBuildings;
     readonly Surface surface;
     readonly Dictionary<int,int> levels = new();
     readonly HashSet<int> disabled = new();
@@ -23,6 +24,7 @@ sealed partial class Colony
     readonly ProductionGroup[] producers, consumers, batteries;
     readonly ProductionGroup[] observatories;
     public MapSettings MapSettings => surface.Settings;
+    public ColonySite Site { get; }
     public byte[] Widths => surface.Widths;
     public byte[] Heights => surface.Heights;
     readonly Dictionary<string,long> stock, delta;
@@ -33,12 +35,14 @@ sealed partial class Colony
     long tick, generated, used, demand;
     bool shortage;
 
-    bool Storm => tick % rules.World.Storm.Period >= rules.World.Storm.Start &&
+    bool Storm => Site.Kind == "mars" && tick % rules.World.Storm.Period >= rules.World.Storm.Start &&
         tick % rules.World.Storm.Period < rules.World.Storm.End;
 
-    public Colony(GameRules rules, bool stress = false, MapSettings? map = null, bool empty = false)
+    public Colony(GameRules rules, bool stress = false, MapSettings? map = null, bool empty = false, ColonySite? site = null)
     {
         this.rules = rules;
+        Site = site ?? ColonySite.Mars;
+        allowedBuildings = rules.Buildings.Where(Site.Allows).Select(building => building.Id).ToArray();
         counts = new int[rules.Buildings.Length];
         surface = new Surface(rules,map);
         groups = rules.Buildings.Select(b => new[] { new ProductionGroup(b) }
@@ -62,7 +66,7 @@ sealed partial class Colony
         if (stress)
         {
             for (int i = 0; i < 100_000; i++)
-                Place(unchecked(i * 499979) & (Grid.Length - 1), i % counts.Length + 1,new Footprint());
+                Place(unchecked(i * 499979) & (Grid.Length - 1), allowedBuildings[i % allowedBuildings.Length],new Footprint());
             foreach (var material in rules.Materials) stock[material.Id] = 100_000;
             population = 60_000;
         }
@@ -81,7 +85,17 @@ sealed partial class Colony
             .Sum(g => (long)g.Count * OutputPower(g.Building));
     }
 
-    int OutputPower(Building b) => Storm ? b.StormGeneration ?? b.Generation : b.Generation;
+    int OutputPower(Building b)
+    {
+        if (Storm) return b.StormGeneration ?? b.Generation;
+        if (b.Art != "solar") return b.Generation;
+        return Site.Kind switch
+        {
+            "orbit" => Site.Distance >= 5 ? b.Generation / 2 : b.Generation * 3 / 2,
+            "moon" => b.Generation / 2,
+            _ => b.Generation
+        };
+    }
 
     public void Step()
     {
@@ -166,7 +180,7 @@ sealed partial class Colony
         }
         if (tick % world.ArrivalInterval != 0) return;
         if (shortage && population > 1) population--;
-        else if (!shortage && surplus && population < Math.Min(housing,MaxPopulation)) population++;
+        else if (Site.Kind == "mars" && !shortage && surplus && population < Math.Min(housing,MaxPopulation)) population++;
     }
 
     void RefreshCapacity()
@@ -177,7 +191,8 @@ sealed partial class Colony
 
     public object Status(int revision,bool stress,bool paused,int speed,bool started = true,bool hasSave = false,int worldRevision = 0,int inspect = -1) => new
     {
-        revision, stress, paused, speed, tick, started, hasSave, worldRevision, inspected = Inspect(inspect), stock = new Dictionary<string,long>(stock),
+        revision, stress, paused, speed, tick, started, hasSave, worldRevision, site = Site, allowedBuildings,
+        inspected = Inspect(inspect), stock = new Dictionary<string,long>(stock),
         delta = new Dictionary<string,long>(delta), population, housing,
         supply = generated, demand, used, crewUsed, crewCapacity = population * rules.World.CrewPerColonist,
         batteryCharge = power.Charge, batteryCapacity = power.Capacity, batteryAvailable = power.Available,

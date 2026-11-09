@@ -28,6 +28,25 @@ Battery cover uses recorded demand, stored charge, and the storm output of
 generators that run without fuel or crew. An offline observatory keeps its last
 reading, including its original observation tick.
 
+## Expand into space
+
+1. On Mars, build and power a **Space communications relay**, a **Spacecraft
+   assembly yard**, and a **Surface cargo terminal**. Produce propellant.
+2. Open **Space logistics** below the map. Assemble a spacecraft for 16 alloy,
+   choose a destination, and load up to 60 units. A founding mission also costs
+   24 alloy and installs solar power, a habitat, communications, and a dock or
+   terminal. Pack food, water, alloy for new facilities, and return propellant.
+3. After arrival, switch views from the same panel. Build a Research Lab at an
+   orbital station and reach 30 RP there. Ceres offers iron, titanium, and
+   uranium. Europa offers ice, brine, and silicon, with weaker solar output.
+4. For an established destination, schedule a ship with a material, source
+   reserve, and destination reorder threshold. It makes repeat trips as
+   supplies and fuel allow. Leave return propellant at the destination.
+
+All bases advance together. Cargo remains aboard if the destination's dock is
+offline or storage is full. Saving captures all bases, spacecraft, and routes.
+Older single-colony saves open on Mars with an empty fleet.
+
 ## Generate, edit, or load a map
 
 The launch screen previews the geology before the colony clock starts.
