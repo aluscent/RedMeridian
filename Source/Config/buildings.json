@@ -1,0 +1,618 @@
+[
+  {
+    "id": 1,
+    "name": "Solar array",
+    "category": "Power",
+    "art": "solar",
+    "image": "assets/solar-array.png",
+    "cost": {
+      "alloy": 4
+    },
+    "generation": 8,
+    "stormGeneration": 3
+  },
+  {
+    "id": 2,
+    "name": "Iron mine",
+    "category": "Extraction",
+    "art": "mine",
+    "image": "assets/iron-mine.png",
+    "cost": {
+      "alloy": 5
+    },
+    "power": 2,
+    "crew": 2,
+    "priority": 30,
+    "deposit": "iron",
+    "outputs": {
+      "ore": 5
+    },
+    "upgrades": [
+      {
+        "multiplier": 2,
+        "cost": {
+          "alloy": 10
+        },
+        "extraPower": 2,
+        "extraCrew": 1
+      },
+      {
+        "multiplier": 3,
+        "cost": {
+          "alloy": 18,
+          "silicon": 4
+        },
+        "extraPower": 4,
+        "extraCrew": 2
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "name": "Ice extractor",
+    "category": "Extraction",
+    "art": "extractor",
+    "image": "assets/ice-extractor.png",
+    "cost": {
+      "alloy": 5
+    },
+    "power": 2,
+    "crew": 2,
+    "priority": 10,
+    "deposit": "ice",
+    "outputs": {
+      "water": 5
+    },
+    "upgrades": [
+      {
+        "multiplier": 2,
+        "cost": {
+          "alloy": 10
+        },
+        "extraPower": 2,
+        "extraCrew": 1
+      },
+      {
+        "multiplier": 3,
+        "cost": {
+          "alloy": 18,
+          "silicon": 4
+        },
+        "extraPower": 4,
+        "extraCrew": 2
+      }
+    ]
+  },
+  {
+    "id": 4,
+    "name": "Greenhouse",
+    "category": "Life support",
+    "art": "greenhouse",
+    "image": "assets/greenhouse.png",
+    "cost": {
+      "alloy": 6
+    },
+    "power": 2,
+    "crew": 2,
+    "priority": 20,
+    "inputs": {
+      "water": 1
+    },
+    "outputs": {
+      "food": 5
+    }
+  },
+  {
+    "id": 5,
+    "name": "Refinery",
+    "category": "Industry",
+    "art": "refinery",
+    "image": "assets/refinery.png",
+    "cost": {
+      "alloy": 8
+    },
+    "power": 3,
+    "crew": 2,
+    "priority": 40,
+    "inputs": {
+      "ore": 3
+    },
+    "outputs": {
+      "alloy": 4
+    }
+  },
+  {
+    "id": 6,
+    "name": "Habitat",
+    "category": "Life support",
+    "art": "habitat",
+    "image": "assets/habitat.png",
+    "cost": {
+      "alloy": 10
+    },
+    "power": 1,
+    "beds": 8,
+    "priority": 0
+  },
+  {
+    "id": 7,
+    "name": "Research lab",
+    "category": "Science",
+    "art": "lab",
+    "image": "assets/research-lab.png",
+    "cost": {
+      "alloy": 12
+    },
+    "power": 3,
+    "crew": 2,
+    "priority": 60,
+    "inputs": {
+      "alloy": 1
+    },
+    "outputs": {
+      "research": 3
+    }
+  },
+  {
+    "id": 8,
+    "name": "Heat plant",
+    "category": "Terraforming",
+    "art": "heat",
+    "image": "assets/heat-plant.png",
+    "cost": {
+      "alloy": 18
+    },
+    "power": 4,
+    "crew": 3,
+    "research": "thermal",
+    "inputs": {
+      "ore": 2
+    },
+    "effects": {
+      "temperature": 4,
+      "pressure": 5
+    }
+  },
+  {
+    "id": 9,
+    "name": "Algae dome",
+    "category": "Terraforming",
+    "art": "algae",
+    "image": "assets/algae-dome.png",
+    "cost": {
+      "alloy": 22
+    },
+    "power": 4,
+    "crew": 3,
+    "research": "algae",
+    "inputs": {
+      "water": 2
+    },
+    "effects": {
+      "oxygen": 1
+    }
+  },
+  {
+    "id": 10,
+    "name": "Waterworks",
+    "category": "Terraforming",
+    "art": "waterworks",
+    "image": "assets/waterworks.png",
+    "cost": {
+      "alloy": 24
+    },
+    "power": 4,
+    "crew": 3,
+    "research": "hydrology",
+    "inputs": {
+      "water": 4
+    },
+    "effects": {
+      "surface-water": 2
+    }
+  },
+  {
+    "id": 11,
+    "name": "Battery bank",
+    "category": "Power",
+    "art": "battery",
+    "image": "assets/battery-bank.png",
+    "cost": {
+      "alloy": 8
+    },
+    "storage": 24,
+    "chargeRate": 6,
+    "dischargeRate": 8
+  },
+  {
+    "id": 12,
+    "name": "Wind turbine",
+    "category": "Power",
+    "art": "wind",
+    "image": "assets/wind-turbine.png",
+    "cost": {
+      "alloy": 12,
+      "silicon": 2
+    },
+    "generation": 5,
+    "stormGeneration": 10,
+    "research": "grid"
+  },
+  {
+    "id": 13,
+    "name": "Geothermal station",
+    "category": "Power",
+    "art": "heat",
+    "image": "assets/geothermal-station.png",
+    "cost": {
+      "alloy": 20,
+      "titanium": 4
+    },
+    "generation": 18,
+    "deposit": "vent",
+    "crew": 2,
+    "research": "grid",
+    "footprint": {
+      "width": 2,
+      "height": 2
+    }
+  },
+  {
+    "id": 14,
+    "name": "Fuel-cell plant",
+    "category": "Power",
+    "art": "battery",
+    "image": "assets/fuel-cell-plant.png",
+    "cost": {
+      "alloy": 16,
+      "silicon": 4
+    },
+    "generation": 24,
+    "inputs": {
+      "propellant": 2
+    },
+    "research": "grid"
+  },
+  {
+    "id": 15,
+    "name": "Fission reactor",
+    "category": "Power",
+    "art": "reactor",
+    "image": "assets/fission-reactor.png",
+    "cost": {
+      "alloy": 36,
+      "titanium": 12,
+      "silicon": 8
+    },
+    "generation": 70,
+    "crew": 3,
+    "inputs": {
+      "uranium": 1
+    },
+    "research": "fission",
+    "footprint": {
+      "width": 2,
+      "height": 2
+    }
+  },
+  {
+    "id": 16,
+    "name": "Silica quarry",
+    "category": "Extraction",
+    "art": "mine",
+    "image": "assets/silica-quarry.png",
+    "cost": {
+      "alloy": 9
+    },
+    "power": 3,
+    "crew": 2,
+    "priority": 31,
+    "deposit": "silicon",
+    "outputs": {
+      "silicon": 4
+    },
+    "research": "survey",
+    "upgrades": [
+      {
+        "multiplier": 2,
+        "cost": {
+          "alloy": 10
+        },
+        "extraPower": 2,
+        "extraCrew": 1
+      },
+      {
+        "multiplier": 3,
+        "cost": {
+          "alloy": 18,
+          "silicon": 4
+        },
+        "extraPower": 4,
+        "extraCrew": 2
+      }
+    ]
+  },
+  {
+    "id": 17,
+    "name": "Titanium mine",
+    "category": "Extraction",
+    "art": "mine",
+    "image": "assets/titanium-mine.png",
+    "cost": {
+      "alloy": 13
+    },
+    "power": 4,
+    "crew": 2,
+    "priority": 32,
+    "deposit": "titanium",
+    "outputs": {
+      "titanium": 3
+    },
+    "research": "survey",
+    "upgrades": [
+      {
+        "multiplier": 2,
+        "cost": {
+          "alloy": 10
+        },
+        "extraPower": 2,
+        "extraCrew": 1
+      },
+      {
+        "multiplier": 3,
+        "cost": {
+          "alloy": 18,
+          "silicon": 4
+        },
+        "extraPower": 4,
+        "extraCrew": 2
+      }
+    ]
+  },
+  {
+    "id": 18,
+    "name": "Brine well",
+    "category": "Extraction",
+    "art": "extractor",
+    "image": "assets/brine-well.png",
+    "cost": {
+      "alloy": 9
+    },
+    "power": 3,
+    "crew": 2,
+    "priority": 8,
+    "deposit": "brine",
+    "outputs": {
+      "brine": 7
+    },
+    "research": "survey",
+    "upgrades": [
+      {
+        "multiplier": 2,
+        "cost": {
+          "alloy": 10
+        },
+        "extraPower": 2,
+        "extraCrew": 1
+      },
+      {
+        "multiplier": 3,
+        "cost": {
+          "alloy": 18,
+          "silicon": 4
+        },
+        "extraPower": 4,
+        "extraCrew": 2
+      }
+    ]
+  },
+  {
+    "id": 19,
+    "name": "Uranium mine",
+    "category": "Extraction",
+    "art": "mine",
+    "image": "assets/uranium-mine.png",
+    "cost": {
+      "alloy": 16,
+      "titanium": 3
+    },
+    "power": 5,
+    "crew": 2,
+    "priority": 33,
+    "deposit": "uranium",
+    "outputs": {
+      "uranium": 2
+    },
+    "research": "deep",
+    "upgrades": [
+      {
+        "multiplier": 2,
+        "cost": {
+          "alloy": 10
+        },
+        "extraPower": 2,
+        "extraCrew": 1
+      },
+      {
+        "multiplier": 3,
+        "cost": {
+          "alloy": 18,
+          "silicon": 4
+        },
+        "extraPower": 4,
+        "extraCrew": 2
+      }
+    ]
+  },
+  {
+    "id": 20,
+    "name": "Desalination plant",
+    "category": "Industry",
+    "art": "waterworks",
+    "image": "assets/desalination-plant.png",
+    "cost": {
+      "alloy": 12
+    },
+    "power": 3,
+    "crew": 2,
+    "priority": 11,
+    "inputs": {
+      "brine": 5
+    },
+    "outputs": {
+      "water": 8
+    },
+    "research": "survey"
+  },
+  {
+    "id": 21,
+    "name": "Propellant works",
+    "category": "Industry",
+    "art": "refinery",
+    "image": "assets/propellant-works.png",
+    "cost": {
+      "alloy": 18,
+      "silicon": 4
+    },
+    "power": 5,
+    "crew": 2,
+    "priority": 45,
+    "inputs": {
+      "water": 4
+    },
+    "outputs": {
+      "propellant": 3
+    },
+    "research": "grid"
+  },
+  {
+    "id": 22,
+    "name": "Crew shelter",
+    "category": "Life support",
+    "art": "shelter",
+    "image": "assets/crew-shelter.png",
+    "cost": {
+      "alloy": 5
+    },
+    "power": 1,
+    "beds": 3,
+    "priority": 1
+  },
+  {
+    "id": 23,
+    "name": "Habitat block",
+    "category": "Life support",
+    "art": "tower",
+    "image": "assets/habitat-block.png",
+    "cost": {
+      "alloy": 24,
+      "silicon": 6
+    },
+    "power": 3,
+    "beds": 28,
+    "priority": 0,
+    "research": "habitats",
+    "footprint": {
+      "width": 2,
+      "height": 2
+    }
+  },
+  {
+    "id": 24,
+    "name": "Settlement dome",
+    "category": "Life support",
+    "art": "algae",
+    "image": "assets/settlement-dome.png",
+    "cost": {
+      "alloy": 44,
+      "titanium": 12,
+      "silicon": 12
+    },
+    "power": 7,
+    "beds": 72,
+    "priority": 0,
+    "research": "orbital",
+    "footprint": {
+      "width": 3,
+      "height": 3
+    }
+  },
+  {
+    "id": 25,
+    "name": "Core drilling facility",
+    "category": "Science",
+    "art": "drill",
+    "image": "assets/core-drilling-facility.png",
+    "cost": {
+      "alloy": 26,
+      "titanium": 6
+    },
+    "power": 8,
+    "crew": 4,
+    "priority": 58,
+    "inputs": {
+      "water": 2,
+      "alloy": 2
+    },
+    "outputs": {
+      "research": 12
+    },
+    "research": "deep",
+    "footprint": {
+      "width": 2,
+      "height": 2
+    }
+  },
+  {
+    "id": 26,
+    "name": "Space launch site",
+    "category": "Science",
+    "art": "launch",
+    "image": "assets/space-launch-site.png",
+    "cost": {
+      "alloy": 55,
+      "titanium": 16,
+      "silicon": 10
+    },
+    "power": 12,
+    "crew": 6,
+    "priority": 57,
+    "inputs": {
+      "propellant": 6,
+      "alloy": 4
+    },
+    "outputs": {
+      "research": 32
+    },
+    "research": "orbital",
+    "footprint": {
+      "width": 3,
+      "height": 2
+    }
+  },
+  {
+    "id": 27,
+    "name": "Hydroponics hall",
+    "category": "Life support",
+    "art": "greenhouse",
+    "image": "assets/hydroponics-hall.png",
+    "cost": {
+      "alloy": 18,
+      "silicon": 4
+    },
+    "power": 4,
+    "crew": 3,
+    "priority": 21,
+    "inputs": {
+      "water": 3
+    },
+    "outputs": {
+      "food": 18
+    },
+    "research": "habitats",
+    "footprint": {
+      "width": 2,
+      "height": 2
+    }
+  }
+]
