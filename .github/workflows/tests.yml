@@ -1,0 +1,32 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run domain tests and build the game
+        run: dotnet run --project Tests/RedMeridian.Tests.csproj --configuration Release
+      - name: Check browser scripts
+        run: |
+          for edition in Source Play; do
+            for script in "$edition"/wwwroot/*.js; do
+              node --check "$script" || exit 1
+            done
+          done
+      - name: Run asset and live API tests
+        run: node --test Tests/game.test.mjs

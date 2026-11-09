@@ -5,6 +5,21 @@ Keep the server window open. The Windows build requires the ASP.NET Core 8 runti
 To build from source with the .NET 8 SDK, run
 `dotnet run --project Source -- --urls http://127.0.0.1:5287`.
 
+## Run the tests
+
+Use the .NET 8 SDK and Node.js 22 or newer. From the project root, run:
+
+```sh
+dotnet run --project Tests/RedMeridian.Tests.csproj --configuration Release
+node --test Tests/game.test.mjs
+```
+
+The first command runs the domain tests and builds the server. The second
+checks sprite assets and exercises the live API, including browser/server map
+agreement and a save/load round trip. It starts its own server on a temporary
+local port and uses a separate save directory. GitHub Actions runs the suite
+and checks JavaScript syntax on pushes and pull requests.
+
 ## Generate, edit, or load a map
 
 The launch screen previews the geology before the colony clock starts.
