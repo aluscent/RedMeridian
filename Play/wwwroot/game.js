@@ -52,7 +52,7 @@ function center() {
   requestDraw();
 }
 function screen(x,y) {
-  return [width/2 + ((x-cx)-(y-cy))*48*scale, height/2 + ((x-cx)+(y-cy))*24*scale];
+  return Isometric.project(x-cx,y-cy,scale,width/2,height/2);
 }
 function world(x,y) {
   const dx=(x-width/2)/(96*scale), dy=(y-height/2)/(48*scale);
@@ -93,7 +93,7 @@ function deposit(index) {
   return allowed===null || allowed?.includes(deposit?.id) ? deposit : null;
 }
 function footprint(x,y,w,h,color,stroke,target=ctx) {
-  Sprites.polygon(target,[screen(x,y),screen(x+w,y),screen(x+w,y+h),screen(x,y+h)],color,stroke);
+  Isometric.footprint(target,screen,x,y,w,h,color,stroke);
 }
 function blocked(x,y,recipe) {
   const {width:w,height:h}=recipe.footprint;
@@ -134,11 +134,7 @@ function climateColor(cell,x,y) {
   const saturation=warmth<0 ? 23+warmth*10 : 25+warmth*12;
   return "hsla("+hue+","+saturation+"%,"+light+"%,"+(water===3 ? .75 : .58)+")";
 }
-function terrainShade(x,y) {
-  const grain = Math.imul(x+19,374761393)^Math.imul(y+13,668265263);
-  const ridge = Math.sin(x*.17+y*.10)+Math.sin(y*.21-x*.08);
-  return Math.min(7,Math.max(0, Math.floor(4+ridge*1.5+(grain>>>28)/7-1)));
-}
+const terrainShade=Isometric.shade;
 const terrainChunks=new Map();
 const chunkSize=12, terrainBudget=48*1024*1024;
 let terrainBytes=0;
@@ -167,16 +163,12 @@ function terrainChunk(left,top,right,bottom,raster) {
     for(let x=Math.max(0,diagonal-rows+1);x<=Math.min(cols-1,diagonal);x++) {
       const y=diagonal-x, px=offset+(x-y)*48, py=diagonal*24;
       const shade=terrainShade(left+x,top+y);
-      if(mapSite.kind==="orbit")
-        Sprites.polygon(g,[[px,py],[px+48,py+24],[px,py+48],[px-48,py+24]],
-          shade%2?"#2e394a":"#344153","#53647b");
-      else {
-        const ore=deposit((top+y)*size+left+x);
-        g.drawImage(tileSprites[shade+(ore?ore.index*8:0)],px-49,py);
-        if(climateData) {
-          const color=climateColor(mapOffset(left+x,top+y),left+x,top+y);
-          if(color) Sprites.polygon(g,[[px,py],[px+48,py+24],[px,py+48],[px-48,py+24]],color);
-        }
+      const orbit=mapSite.kind==="orbit";
+      const ore=orbit ? null : deposit((top+y)*size+left+x);
+      Isometric.drawGround(g,px,py,shade,orbit,tileSprites,ore?.index);
+      if(!orbit && climateData) {
+        const color=climateColor(mapOffset(left+x,top+y),left+x,top+y);
+        if(color) Sprites.polygon(g,[[px,py],[px+48,py+24],[px,py+48],[px-48,py+24]],color);
       }
     }
   }
@@ -245,24 +237,22 @@ function rebuildScene(water) {
       }
       if(type) {
         const w=widths[cell], h=heights[cell];
-        const [sx,sy]=screen(x+(w-1)/2,y+(h-1)/2);
-        const spriteScale=scale*(w+h)/2;
-        // Align the bottom of the sprite to the front corner of the footprint.
-        const spriteY=sy+(w+h+2)*12*scale-50*spriteScale;
-        if(sx+48*spriteScale>=0 && sx-48*spriteScale<width && spriteY+50*spriteScale>=0 && spriteY-50*spriteScale<height)
-          buildings.push([sx,spriteY,type,x,y,spriteScale,w,h,x+y+w+h]);
+        const building=Isometric.place(screen,scale,type,x,y,w,h);
+        const [sx,sy,,,,s]=building;
+        if(sx+48*s>=0 && sx-48*s<width && sy+50*s>=0 && sy-50*s<height)
+          buildings.push(building);
       }
     }
   }
-  buildings.sort((a,b)=>a[8]-b[8] || a[3]-b[3]);
+  buildings.sort(Isometric.depth);
   drawnBuildings=buildings;
   visible=buildings.length;
+  for(const building of buildings) Isometric.drawFoundation(ground,screen,mapSite.kind,building);
   for(const building of buildings) drawBuilding(structures,building);
 }
 
-function drawBuilding(target,[px,py,type,x,y,spriteScale,w,h]) {
-  if((w>1 || h>1) && mapSite.kind!=="orbit") footprint(x,y,w,h,"#30252260","#9b795e",target);
-  target.drawImage(buildingSprites[type-1],px-48*spriteScale,py-50*spriteScale,96*spriteScale,100*spriteScale);
+function drawBuilding(target,building) {
+  Isometric.drawBuilding(target,buildingSprites[building[2]-1],building);
 }
 
 function drawHighlight(highlight) {
@@ -935,34 +925,13 @@ $("file").onchange=async event=>{
     await command("import",{save:JSON.parse(await file.text())});
   } catch(error) { notice(error.message,true); }
 };
-async function loadSprite(building,path=building.image,fallback=null,source=null) {
-  const template=fallback ?? Sprites.buildings[Math.max(0,Sprites.art.indexOf(building.art))];
-  if(!path && !source) return template;
-  let image=source;
-  if(!image) {
-    image=new Image();
-    image.src=path;
-    try { await image.decode(); }
-    catch { return template; }
-  }
-  const density=Math.max(2,building.footprint.width,building.footprint.height);
-  const sprite=Object.assign(document.createElement("canvas"),{width:96*density,height:100*density});
-  const iw=image.naturalWidth || image.width, ih=image.naturalHeight || image.height;
-  const fit=Math.min(sprite.width/iw,sprite.height/ih);
-  const w=iw*fit,h=ih*fit;
-  const g=sprite.getContext("2d");
-  g.imageSmoothingQuality="high";
-  g.drawImage(image,(sprite.width-w)/2,sprite.height-h,w,h);
-  return sprite;
-}
+
 async function useEnvironmentSprites(site) {
   const env=Artwork.environment(site.kind), key=site.galaxy+"/"+env;
   if(key===spriteEnvironment) return;
   if(!environmentSprites.has(key)) environmentSprites.set(key,(async()=>{
     const [sprites,icons]=await Promise.all([
-      Promise.all(catalog.buildings.map(async building=>loadSprite(
-        building,building.environmentImages?.[env] ?? building.image,null,
-        await Artwork.sprite(site.galaxy,env,"building",building.id)))),
+      Promise.all(catalog.buildings.map(building=>Isometric.loadBuilding(building,site.kind,site.galaxy))),
       Promise.all(catalog.materials.map(material=>Artwork.sprite(site.galaxy,env,"resource",material.id)))
     ]);
     return {sprites,masks:spriteMasks(sprites),icons};
@@ -1017,7 +986,7 @@ async function initialize() {
     for(const type of catalog.shipTypes) $("shipType").add(new Option(type.name,type.id));
     const deposits=catalog.world.deposits.map((d,index)=>({...d,index:index+1}));
     [buildingSprites,tileSprites]=await Promise.all([
-      Promise.all(catalog.buildings.map(building=>loadSprite(building))),
+      Promise.all(catalog.buildings.map(building=>Isometric.loadSprite(building))),
       Sprites.makeTiles(deposits)
     ]);
     masks=spriteMasks(buildingSprites);

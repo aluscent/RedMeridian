@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Red Meridian · Sprite preview</title>
+<link rel="stylesheet" href="/preview.css">
+<script defer src="/sprites.js"></script>
+<script defer src="/artwork.js"></script>
+<script defer src="/isometric.js"></script>
+<script defer src="/preview.js"></script>
+</head>
+<body>
+<main>
+  <h1>Red Meridian sprite preview</h1>
+  <form aria-label="Preview settings">
+    <label>Environment <select id="environment"><option value="mars">Planetary</option><option value="orbit">Orbital</option></select></label>
+    <label>Building 1 <select class="building"></select></label>
+    <label>Building 2 <select class="building"></select></label>
+    <label>Building 3 <select class="building"></select></label>
+    <label>Direction <select id="axis"><option value="x">Across columns</option><option value="y">Across rows</option></select></label>
+    <label>Gap <select id="gap"><option value="0">Touching</option><option value="1">One tile</option></select></label>
+    <label class="toggle"><input id="outlines" type="checkbox" checked> Footprint outlines</label>
+    <label class="toggle"><input id="catalogMode" type="checkbox"> Full catalog</label>
+  </form>
+  <p id="status" role="status">Loading sprites…</p>
+  <canvas id="scene" aria-label="Isometric preview of neighboring buildings and their tile footprints"></canvas>
+  <section id="catalog" aria-label="Building catalog preview" hidden></section>
+</main>
+</body>
+</html>

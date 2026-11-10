@@ -1,0 +1,15 @@
+:root{color-scheme:dark;font:15px system-ui,sans-serif;background:#191613;color:#f4e7d7}
+body{margin:0}
+main{max-width:1240px;margin:auto;padding:16px}
+h1{font-size:1.45rem;margin:0 0 12px}
+form{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+label{display:grid;gap:4px}
+label.toggle{display:flex;align-items:center;padding:5px}
+select{max-width:100%;padding:5px}
+#status{color:#dbc7b3;min-height:1.3em}
+[hidden]{display:none!important}
+#catalog{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px}
+#catalog figure{margin:0;min-width:0}
+#catalog canvas{height:140px}
+#catalog figcaption{padding:4px;font-size:.85rem}
+canvas{display:block;width:100%;height:clamp(300px,65dvh,650px);background:#38251d;border-radius:7px}
