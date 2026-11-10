@@ -735,8 +735,12 @@ function updateInfo(info) {
     render();
   }
   $("infoName").textContent=recipe.name+(recipe.upgrades.length?" · Level "+info.level:"");
-  const lines=[(info.disabled?"Shut down":info.running?"Operating":"Idle")+" · "+info.width+"×"+info.height+" tiles",
-    "Workers "+info.workers+" / "+info.crew];
+  const status=info.disabled ? "Shut down" : info.running ? "Operating" :
+    info.temperatureBlocked ? "Temperature out of range" :
+    recipe.beds && info.ratedPowerUse ? "Waiting for power" : "Idle";
+  const lines=[status+" / "+info.width+"x"+info.height+" tiles"];
+  if(recipe.beds) lines.push("Housing capacity "+(info.running ? recipe.beds : 0)+" / "+recipe.beds+" beds");
+  if(info.crew) lines.push("Workers "+info.workers+" / "+info.crew);
   if(info.ratedPowerOutput) lines.push("Power output "+info.powerOutput+" / "+info.ratedPowerOutput);
   if(info.ratedPowerUse) lines.push("Power draw "+info.powerUse+" / "+info.ratedPowerUse);
   if(info.temperatureBlocked) lines.push("Offline: footprint is outside the operating temperature range.");

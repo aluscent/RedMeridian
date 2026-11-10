@@ -106,8 +106,9 @@ elevation levels, and a new building footprint can span three levels
 (for example, elevations 7 through 9). Terrain shading shows relief,
 sunlight, temperature, and water depth on the normal map.
 
-Mars gains 1% population every six in-game hours while it has housing and
-supply reserves. Fractions carry over to later arrivals. A powered and
+Mars gains one colonist every six in-game hours below 100 population,
+then gains 1% every six hours. Both rates require spare housing and supply
+reserves. Fractional percentage growth carries over to later arrivals. A powered and
 staffed Human production facility adds one colonist per in-game hour on any
 base with spare housing and supplies for the additional colonist.
 

@@ -164,6 +164,8 @@ sealed class GameRules
                 b.Upgrades.All(u => u.Multiplier is >= 2 and <= 10 && Amounts(u.Cost,materialIds) &&
                     u.ExtraPower is >= 0 and <= 1000 && u.ExtraCrew is >= 0 and <= 1000),
                 $"Invalid footprint or upgrades for {b.Name}.");
+            Require(b.Beds == 0 || b.Crew == 0 && b.Upgrades.All(u => u.ExtraCrew == 0),
+                $"Housing must operate without workers: {b.Name}.");
             static bool ImagePath(string? path) => path is not null && System.Text.RegularExpressions.Regex.IsMatch(path,
                 @"^assets/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+[.]png$");
             Require((b.Image is null || ImagePath(b.Image)) && b.EnvironmentImages is not null &&
