@@ -16,6 +16,7 @@ var rules = new GameRules(Path.Combine(AppContext.BaseDirectory, "Config"));
     ("Assembly pauses offline and preserves typed orders through saves", TimedAssembly),
     ("Planetary engineering requires long-term investment and runs only on planets", PlanetaryEngineering),
     ("Meridian terrain has bounded slopes and rejects steep footprints", MeridianTerrain),
+    ("Powered housing provides beds without workers", UnstaffedHousing),
     ("Mars migration accrues fractional growth and staffed facilities add colonists", PopulationGrowth),
     ("Climate is seeded and humidity narrows both sides of the temperature band", ClimateMath),
     ("Ocean transitions remove whole footprints once and preserve usable shore", OceanTransitions),
@@ -371,6 +372,32 @@ void MeridianTerrain()
     Reject(() => colony.Build(steep,building.Id));
     var legacy = Colony.Restore(rules,colony.Export() with { PlanetBounds = new(108,110) },site);
     Equal(108,legacy.Site.Width);
+}
+
+void UnstaffedHousing()
+{
+    var habitat = rules.Buildings.First(b => b.Beds > 0);
+    var solar = rules.Buildings.Single(b => b.Art == "solar");
+    int anchor = 511*Colony.Size+511;
+    var save = new Colony(rules,empty: true).Export();
+    var colony = Colony.Restore(rules,save with
+    {
+        Population = 0,
+        Tiles = [[anchor,solar.Id],[anchor+1,habitat.Id]]
+    });
+
+    colony.Step();
+    using var powered = Status(colony);
+    Equal(0,powered.RootElement.GetProperty("crewCapacity").GetInt32());
+    Equal(habitat.Beds,powered.RootElement.GetProperty("housing").GetInt32());
+    var info = System.Text.Json.JsonSerializer.SerializeToElement(colony.Inspect(anchor+1));
+    Equal(true,info.GetProperty("running").GetBoolean());
+    Equal(0,info.GetProperty("crew").GetInt32());
+
+    colony.Toggle(anchor);
+    colony.Step();
+    using var offline = Status(colony);
+    Equal(0,offline.RootElement.GetProperty("housing").GetInt32());
 }
 
 void PopulationGrowth()
