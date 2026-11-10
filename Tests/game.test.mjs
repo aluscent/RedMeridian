@@ -45,6 +45,18 @@ test("shared sprite placement anchors rectangular footprints and sorts back to f
   assert.equal(y+50*scale,screen(5,3)[1]);
   assert.equal(scale,3.125);
   assert.deepEqual([wide,rear].sort(iso.depth),[rear,wide]);
+  for(const kind of ["mars","orbit"]){
+    const polygons=[];
+    globalThis.Sprites={polygon:(_ctx,points)=>polygons.push(points)};
+    try {
+      iso.drawFoundation({},screen,kind,wide);
+      assert.deepEqual(polygons[2],[screen(2,1),screen(5,1),screen(5,3),screen(2,3)]);
+      iso.drawFoundation({},screen,kind,rear);
+      assert.equal(polygons.length,4);
+    } finally {
+      delete globalThis.Sprites;
+    }
+  }
 });
 
 test("partial galaxy art falls back per asset in the same environment", async () => {

@@ -1,7 +1,7 @@
 "use strict";
 
 const $=id=>document.getElementById(id);
-const canvas=$("scene"),g=canvas.getContext("2d"),picks=[...document.querySelectorAll(".building")];
+const canvas=$("scene"),picks=[...document.querySelectorAll(".building")];
 const kinds={mars:[4,27,24],orbit:[6,27,32]};
 const palette=["#f6c379","#8ce7dd","#e1aeff"];
 const spriteCache=new Map();
@@ -27,8 +27,36 @@ function fillChoices() {
   });
 }
 
+async function modelFor(building,kind,x,y) {
+  const {width:w=1,height:h=1}=building.footprint || {};
+  const key=kind+":"+building.id;
+  if(!spriteCache.has(key)) spriteCache.set(key,Isometric.loadBuilding({...building,footprint:{width:w,height:h}},kind,"milky-way"));
+  return {building,x,y,w,h,sprite:await spriteCache.get(key)};
+}
+
+let review=[];
+async function prepareCatalog(id,kind) {
+  const options=catalog.filter(building=>available(building,kind));
+  const models=await Promise.all(options.map(building=>modelFor(building,kind,1,1)));
+  if(id!==request) return;
+  review=models.map(model=>{
+    const card=document.createElement("figure"), image=document.createElement("canvas"), label=document.createElement("figcaption");
+    label.textContent=model.building.name+" ("+model.w+" x "+model.h+")";
+    card.append(image,label);
+    return {card,image,scene:{kind,models:[model],cols:model.w+2,rows:model.h+2}};
+  });
+  $("catalog").replaceChildren(...review.map(item=>item.card));
+  $("status").textContent=models.length+" "+(kind==="orbit"?"orbital":"planetary")+" buildings";
+  render();
+}
+
 async function prepare() {
   const id=++request,kind=$("environment").value,axis=$("axis").value,gap=Number($("gap").value);
+  const audit=$("catalogMode").checked;
+  $("catalog").hidden=!audit;
+  canvas.hidden=audit;
+  for(const control of [...picks,$("axis"),$("gap")]) control.disabled=audit;
+  if(audit) return prepareCatalog(id,kind);
   const buildings=picks.map(select=>catalog.find(building=>building.id===Number(select.value))).filter(Boolean);
   let cursor=1, cols=3, rows=3;
   const models=await Promise.all(buildings.map(async building=>{
@@ -37,9 +65,7 @@ async function prepare() {
     cursor+=(axis==="x" ? w : h)+gap;
     cols=Math.max(cols,x+w+1);
     rows=Math.max(rows,y+h+1);
-    const key=kind+":"+building.id;
-    if(!spriteCache.has(key)) spriteCache.set(key,Isometric.loadBuilding({...building,footprint:{width:w,height:h}},kind,"milky-way"));
-    return {building,x,y,w,h,sprite:await spriteCache.get(key)};
+    return modelFor(building,kind,x,y);
   }));
   if(id!==request) return;
   scene={kind,models,cols,rows};
@@ -48,7 +74,13 @@ async function prepare() {
 }
 
 function render() {
-  if(!scene) return;
+  if($("catalogMode").checked) {
+    for(const item of review) renderScene(item.image,item.scene);
+  } else if(scene) renderScene(canvas,scene);
+}
+
+function renderScene(canvas,scene) {
+  const g=canvas.getContext("2d");
   const {kind,models,cols,rows}=scene,orbit=kind==="orbit";
   const width=canvas.clientWidth,height=canvas.clientHeight,ratio=window.devicePixelRatio || 1;
   canvas.width=Math.round(width*ratio);
@@ -77,7 +109,8 @@ function render() {
       const y=diagonal-x,[px,py]=screen(x,y);
       Isometric.drawGround(g,px,py,Isometric.shade(x,y),orbit,tiles);
     }
-  for(const {placement,sprite} of ordered) Isometric.drawBuilding(g,screen,sprite,kind,placement);
+  for(const {placement} of ordered) Isometric.drawFoundation(g,screen,kind,placement);
+  for(const {placement,sprite} of ordered) Isometric.drawBuilding(g,sprite,placement);
   if($("outlines").checked){
     g.setLineDash([5,3]);
     models.forEach(({x,y,w,h},i)=>Isometric.footprint(g,screen,x,y,w,h,"#ffffff00",palette[i]));
@@ -93,9 +126,10 @@ async function initialize() {
   fillChoices();
   await prepare();
   $("environment").onchange=()=>{fillChoices();update();};
+  $("catalogMode").onchange=update;
   for(const control of [...picks,$("axis"),$("gap")]) control.onchange=update;
   $("outlines").onchange=render;
-  new ResizeObserver(render).observe(canvas);
+  new ResizeObserver(render).observe(document.querySelector("main"));
 }
 function report(error){$("status").textContent=error.message;}
 function update(){prepare().catch(report);}

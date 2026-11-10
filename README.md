@@ -95,7 +95,9 @@ Run `node Tools/sprite-preview.mjs` and open `http://127.0.0.1:5290`.
 The page loads the source catalog, artwork, terrain, and renderer without
 starting the game or opening a save. Compare up to three adjacent buildings
 on planetary or orbital terrain. Change the direction, spacing, and footprint
-outlines to check how the sprites align and overlap.
+outlines to check how the sprites align and overlap. Enable **Full catalog**
+to inspect every building available in the selected environment. The game
+and preview draw the same grid-aligned foundations for multi-tile buildings.
 
 ## The Terminator
 

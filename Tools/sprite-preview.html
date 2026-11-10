@@ -21,9 +21,11 @@
     <label>Direction <select id="axis"><option value="x">Across columns</option><option value="y">Across rows</option></select></label>
     <label>Gap <select id="gap"><option value="0">Touching</option><option value="1">One tile</option></select></label>
     <label class="toggle"><input id="outlines" type="checkbox" checked> Footprint outlines</label>
+    <label class="toggle"><input id="catalogMode" type="checkbox"> Full catalog</label>
   </form>
   <p id="status" role="status">Loading sprites…</p>
   <canvas id="scene" aria-label="Isometric preview of neighboring buildings and their tile footprints"></canvas>
+  <section id="catalog" aria-label="Building catalog preview" hidden></section>
 </main>
 </body>
 </html>

@@ -7,4 +7,9 @@ label{display:grid;gap:4px}
 label.toggle{display:flex;align-items:center;padding:5px}
 select{max-width:100%;padding:5px}
 #status{color:#dbc7b3;min-height:1.3em}
+[hidden]{display:none!important}
+#catalog{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px}
+#catalog figure{margin:0;min-width:0}
+#catalog canvas{height:140px}
+#catalog figcaption{padding:4px;font-size:.85rem}
 canvas{display:block;width:100%;height:clamp(300px,65dvh,650px);background:#38251d;border-radius:7px}

@@ -44,7 +44,7 @@ const Artwork=(() => {
     return custom || await loadDefault(env,cell(kind,key));
   }
 
-  async function atlasSprite(file,index,columns,rows,trim=false) {
+  async function atlasSprite(file,index,columns,rows,trim=false,clean=false) {
     if(index<0) return null;
     if(!atlasCache.has(file)) atlasCache.set(file,image("assets/refresh/"+file+".png"));
     const atlas=await atlasCache.get(file);
@@ -55,7 +55,8 @@ const Artwork=(() => {
     g.drawImage(atlas,index%columns*w,Math.floor(index/columns)*h,w,h,0,0,w,h);
     if(!trim) return tile;
 
-    const {width,height}=tile, pixels=g.getImageData(0,0,width,height).data;
+    const {width,height}=tile, imageData=g.getImageData(0,0,width,height),pixels=imageData.data;
+    if(clean) removeAtlasFragments(imageData);
     let left=width,top=height,right=0,bottom=0;
     for(let y=0;y<height;y++) for(let x=0;x<width;x++) {
       if(pixels[(y*width+x)*4+3]<96) continue;
@@ -63,18 +64,44 @@ const Artwork=(() => {
       top=Math.min(top,y);bottom=Math.max(bottom,y);
     }
     if(left>right) return null;
+    if(clean) g.putImageData(imageData,0,0);
     const cropped=Object.assign(document.createElement("canvas"),{width:right-left+1,height:bottom-top+1});
     cropped.getContext("2d").drawImage(tile,left,top,cropped.width,cropped.height,0,0,cropped.width,cropped.height);
     return cropped;
   }
 
+  function removeAtlasFragments({data,width,height}) {
+    // The older atlas has a few small fragments from sprites in neighboring cells.
+    const labels=new Uint16Array(width*height),queue=new Uint16Array(labels.length),areas=[0];
+    for(let start=0;start<labels.length;start++){
+      if(labels[start] || data[start*4+3]<96) continue;
+      const id=areas.length;
+      let first=0,last=1;
+      labels[start]=id;queue[0]=start;
+      while(first<last) {
+        const p=queue[first++],x=p%width;
+        for(const next of [x ? p-1 : -1,x+1<width ? p+1 : -1,p-width,p+width]){
+          if(next<0 || next>=labels.length || labels[next] || data[next*4+3]<96) continue;
+          labels[next]=id;queue[last++]=next;
+        }
+      }
+      areas.push(last);
+    }
+    const minimum=Math.max(5,Math.max(...areas)*.035);
+    for(let p=0;p<labels.length;p++) if(labels[p] && areas[labels[p]]<minimum) data[p*4+3]=0;
+  }
+
   async function defaultSprite(env,index,kind,key) {
+    if(env==="orbit" && kind==="building" && key===25) {
+      const drill=await image("assets/refresh/orbit-core-drill.png");
+      if(drill) return drill;
+    }
     const sheet=buildingSheets[env], dedicated=kind==="building" ? sheet.ids.indexOf(key) : -1;
     if(dedicated>=0) {
       const sprite=await atlasSprite(env+"-structures",dedicated,sheet.columns,sheet.rows,true);
       if(sprite) return sprite;
     }
-    return atlasSprite(env,index,7,6);
+    return atlasSprite(env,index,7,6,kind==="building",kind==="building");
   }
 
   async function sprite(galaxy,env,kind,key) {

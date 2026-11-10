@@ -247,11 +247,12 @@ function rebuildScene(water) {
   buildings.sort(Isometric.depth);
   drawnBuildings=buildings;
   visible=buildings.length;
+  for(const building of buildings) Isometric.drawFoundation(ground,screen,mapSite.kind,building);
   for(const building of buildings) drawBuilding(structures,building);
 }
 
 function drawBuilding(target,building) {
-  Isometric.drawBuilding(target,screen,buildingSprites[building[2]-1],mapSite.kind,building);
+  Isometric.drawBuilding(target,buildingSprites[building[2]-1],building);
 }
 
 function drawHighlight(highlight) {
