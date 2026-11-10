@@ -403,13 +403,37 @@ void UnstaffedHousing()
 void PopulationGrowth()
 {
     var colony = new Colony(rules);
-    for (int hour = 0; hour < 24*6; hour++) colony.Step();
-    var save = colony.Export();
-    Equal(4,save.Population);
-    Equal(96,save.MigrationCredit);
-    colony = Colony.Restore(rules,save);
-    for (int hour = 0; hour < 6; hour++) colony.Step();
+    for (int hour = 0; hour < 5; hour++) colony.Step();
+    Equal(4,colony.Export().Population);
+    colony.Step();
     Equal(5,colony.Export().Population);
+
+    var dome = rules.Buildings.Single(b => b.Name == "Settlement dome");
+    var array = rules.Buildings.Single(b => b.Art == "solar");
+    int start = 500*Colony.Size+500;
+    var large = new Colony(rules,empty: true).Export();
+    large.Materials!["food"] = large.Materials["water"] = 10_000;
+    large = large with
+    {
+        Population = 99, MigrationCredit = 95, Tick = 5,
+        Tiles = [[start,array.Id],[start+1,array.Id],[start+2,array.Id],
+            [start+Colony.Size,dome.Id],[start+Colony.Size+3,dome.Id],[start+Colony.Size+6,dome.Id]]
+    };
+    colony = Colony.Restore(rules,large);
+    colony.Step();
+    Equal(100,colony.Export().Population);
+    Equal(0,colony.Export().MigrationCredit);
+    for (int hour = 0; hour < 6; hour++) colony.Step();
+    Equal(101,colony.Export().Population);
+
+    colony = Colony.Restore(rules,large with { Population = 199, MigrationCredit = 0 });
+    colony.Step();
+    Equal(200,colony.Export().Population);
+    Equal(99,colony.Export().MigrationCredit);
+    colony = Colony.Restore(rules,colony.Export());
+    for (int hour = 0; hour < 6; hour++) colony.Step();
+    Equal(202,colony.Export().Population);
+    Equal(99,colony.Export().MigrationCredit);
 
     var solar = rules.Buildings.Single(b => b.Art == "solar");
     var habitat = rules.Buildings.First(b => b.Art == "habitat");

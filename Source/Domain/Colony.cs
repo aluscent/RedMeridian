@@ -230,7 +230,7 @@ sealed partial class Colony
         int availableBeds = Math.Max(0,Math.Min(housing,MaxPopulation)-population);
         if (arrival && Site.Kind == "mars" && surplus && availableBeds > 0)
         {
-            int credit = population + migrationCredit;
+            int credit = population < 100 ? 100 : population + migrationCredit;
             int arrivals = Math.Min(availableBeds,credit/100);
             migrationCredit = credit%100;
             population += arrivals;
