@@ -20,8 +20,7 @@ button:hover,button:focus-visible{border-color:var(--accent)}
 button[aria-pressed=true],.primary{background:#4b3020;border-color:#ac7146;color:#ffd2aa}
 button:disabled{opacity:.5;cursor:default}
 small,#inspect,#clock,footer,dt,#mission{color:var(--muted);font-size:12px}
-.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(234px,275px);gap:12px;align-items:start}
-.stack{display:grid;gap:12px;min-width:0}
+.layout,.stack{min-width:0}
 .map,aside,.planet{border:1px solid var(--line);border-radius:9px;background:var(--panel);overflow:hidden}
 .bar{min-height:37px;padding:6px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 #clock{margin-left:9px;font-family:var(--mono)}
@@ -93,3 +92,18 @@ body:not(.playing) main,body:not(.playing) footer,body:not(.playing) .play-contr
 .stat small{position:absolute;top:100%;left:0;z-index:4;padding:5px 8px;background:#28201b;border:1px solid var(--line);border-radius:4px}
 #infoDescription{margin:0 0 5px;color:var(--muted)}
 #shipAssembly{display:grid;gap:4px;margin:7px 0}
+body.playing main{max-width:none;padding-inline:clamp(6px,1.3vw,22px)}
+.map-tools{justify-content:flex-start}
+canvas#map{height:clamp(440px,calc(100dvh - 230px),1100px)}
+.map-panel{position:absolute;top:8px;right:8px;z-index:5;max-height:calc(100% - 16px);overflow:auto;background:var(--panel);border:1px solid var(--line);box-shadow:0 8px 25px #0009}
+.panel-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.panel-heading h2{margin:0}
+.construction-panel{width:min(300px,78%)}
+.control-panel{width:min(590px,82%)}
+.map-panel #builds{max-height:none;grid-template-columns:1fr}
+#researchPanel,#systemPanel{padding-top:8px}
+#researchPanel .planet{margin-top:12px}
+#systemMap,#fleet,#assemblyOrders{padding-left:20px}
+#systemMap li,#fleet li,#assemblyOrders li{margin:6px 0}
+.stat img{width:17px;height:17px;vertical-align:middle;object-fit:contain}
+@media(max-width:650px){canvas#map{height:clamp(360px,68dvh,660px)}.map-panel{max-height:70%}.control-panel{width:calc(100% - 16px)}}

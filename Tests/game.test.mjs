@@ -35,6 +35,17 @@ test("both editions include the configured PNGs and correctly sized terrain asse
   }
 });
 
+test("partial galaxy art falls back per asset in the same environment", async () => {
+  const { default: artwork } = await import("../Source/wwwroot/artwork.js");
+  const manifest = { orbit: ["building-1", "resource-water"] };
+  const load = async url => url.endsWith("/building-1.png") ? "custom solar" : null;
+  const fallback = async (env, index) => env + ":" + index;
+  assert.equal(await artwork.resolve("test-galaxy", "orbit", "building", 1, manifest, load, fallback), "custom solar");
+  assert.equal(await artwork.resolve("test-galaxy", "orbit", "resource", "water", manifest, load, fallback), "orbit:27");
+  assert.equal(await artwork.resolve("test-galaxy", "planet", "building", 1, manifest, load, fallback), "planet:0");
+  assert.equal(await artwork.resolve("test-galaxy", "orbit", "building", 2, manifest, load, fallback), "orbit:1");
+});
+
 test("live game serves the map, rejects stale edits, and reloads an isolated save", { timeout: 30_000 }, async t => {
   const saveDir = await mkdtemp(join(tmpdir(), "red-meridian-tests-"));
   const server = spawn("dotnet", ["bin/Release/net8.0/RedMeridian.dll", "--urls", "http://127.0.0.1:0", "--developer", "true"], {
@@ -102,6 +113,17 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   for (const abundance of [2, 16]) await command("new", { map: { abundance } }, 400);
   for (const abundance of [3, 15]) await command("new", { map: { abundance } });
   const map = { seed: -123456, abundance: 15, densityPercent: true, paint: { [first]: "iron", [first + 1]: null } };
+  await command("new", { map });
+  await command("pause");
+  await command("save", { saveSlot: "../outside" }, 400);
+  await command("save", { saveSlot: "First landing" });
+  await command("save", { saveSlot: "First landing" }, 400);
+  await command("save", { saveSlot: "Second landing" });
+  assert.deepEqual((await (await get("/api/saves")).json()).map(slot => slot.id).sort(),
+    ["First landing", "Second landing"]);
+  await command("menu");
+  await command("load", { saveSlot: "First landing" });
+  assert.deepEqual(await (await get("/api/surface")).json(), map);
   await command("new", { map });
   const { state } = await command("pause");
   await command("tester-grant", { revision: state.revision, material: "alloy", amount: 100 });

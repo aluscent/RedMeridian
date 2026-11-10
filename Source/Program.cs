@@ -14,6 +14,7 @@ app.UseStaticFiles(new StaticFileOptions
 });
 app.MapGet("/api/catalog", (GameRules rules) => new { rules.Buildings, rules.Materials, rules.Research, rules.World, rules.ShipTypes,
     landingSite = rules.NewSite(ColonySite.Mars) });
+app.MapGet("/api/saves", (ColonySession session) => session.Saves());
 app.MapGet("/api/state", (int? inspect, ColonySession session) => session.Read(inspect ?? -1));
 app.MapGet("/api/surface", (HttpContext context, ColonySession session) => session.Surface(context));
 app.MapGet("/api/map", (HttpContext context, ColonySession session) => session.Map(context));
@@ -42,13 +43,15 @@ async Task TickLoop(ColonySession session, CancellationToken cancellation)
 record Command(string? Action, int Index = -1, int Type = 0, int Revision = -1, SaveData? Save = null,
     int EndIndex = -1, MapSettings? Map = null, string? Base = null, int Ship = 0,
     Dictionary<string,long>? Cargo = null, CargoRoute? Route = null, string? Technology = null,
-    string? Material = null, int Amount = 0, string? ShipType = null, ClimateSettings? Climate = null);
+    string? Material = null, int Amount = 0, string? ShipType = null, ClimateSettings? Climate = null, string? SaveSlot = null);
 
 
 sealed class ColonySession
 {
     readonly object gate = new();
-    readonly string path;
+    readonly string defaultSave;
+    readonly string saveDirectory;
+    string? activeSlot;
     readonly bool developerMode;
     readonly JsonSerializerOptions json = new(JsonSerializerDefaults.Web);
     readonly GameRules rules;
@@ -65,15 +68,42 @@ sealed class ColonySession
     {
         this.rules = rules;
         developerMode = string.Equals(configuration["developer"], "true", StringComparison.OrdinalIgnoreCase);
-        path = Environment.GetEnvironmentVariable("RED_MERIDIAN_SAVE")
+        defaultSave = Path.GetFullPath(Environment.GetEnvironmentVariable("RED_MERIDIAN_SAVE")
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "RedMeridian", developerMode ? "colony.test.json" : "colony.json");
+                "RedMeridian", developerMode ? "colony.test.json" : "colony.json"));
+        saveDirectory = defaultSave + ".slots";
         program = new(rules, new Colony(rules,site: rules.NewSite(ColonySite.Mars)));
     }
 
     Colony Current => stress ?? program.Base(selectedBase);
     object State(int inspect = -1) => Current.Status(revision,stress is not null,paused,speed,
-        started,File.Exists(path),worldRevision,inspect,developerMode);
+        started,File.Exists(defaultSave),worldRevision,inspect,developerMode);
+
+    string SavePath(string? slot)
+    {
+        if (string.IsNullOrEmpty(slot)) return defaultSave;
+        if (slot.Length > 48 || slot != slot.Trim() ||
+            !slot.All(c => char.IsAsciiLetterOrDigit(c) || c is ' ' or '-' or '_'))
+            throw new InvalidOperationException("Use 1-48 letters, numbers, spaces, hyphens, or underscores for the save name.");
+        return Path.Combine(saveDirectory,"slot-" + slot + ".json");
+    }
+
+    public object Saves()
+    {
+        lock (gate)
+        {
+            var slots = new List<object>();
+            if (File.Exists(defaultSave))
+                slots.Add(new { id = "", name = "Default colony", updated = File.GetLastWriteTimeUtc(defaultSave) });
+            if (Directory.Exists(saveDirectory))
+                foreach (var file in Directory.EnumerateFiles(saveDirectory,"slot-*.json").OrderByDescending(File.GetLastWriteTimeUtc))
+                {
+                    var name = Path.GetFileNameWithoutExtension(file)[5..];
+                    slots.Add(new { id = name, name, updated = File.GetLastWriteTimeUtc(file) });
+                }
+            return slots;
+        }
+    }
 
     public object Read(int inspect) { lock (gate) return State(inspect); }
     public MapSettings Surface(HttpContext context)
@@ -167,6 +197,8 @@ sealed class ColonySession
                     case "new":
                         var map = (command.Map ?? new MapSettings(Abundance: 8)) with { DensityPercent = true };
                         Open(new(rules, new Colony(rules,map: map,site: rules.NewSite(ColonySite.Mars))));
+                        activeSlot = null;
+                        diskVersion = 0;
                         message = "Landed on the generated map.";
                         break;
                     case "climate":
@@ -178,9 +210,11 @@ sealed class ColonySession
                         message = flooded == 0 ? "Map climate updated." : $"Flooding demolished {flooded} structures.";
                         break;
                     case "load":
-                        if (!File.Exists(path)) throw new InvalidOperationException("No saved colony on disk.");
-                        var saved = JsonSerializer.Deserialize<SaveData>(File.ReadAllText(path),json);
+                        string loadPath = SavePath(command.SaveSlot);
+                        if (!File.Exists(loadPath)) throw new InvalidOperationException("No saved colony on disk.");
+                        var saved = JsonSerializer.Deserialize<SaveData>(File.ReadAllText(loadPath),json);
                         Open(SpaceProgram.Restore(rules,saved));
+                        activeSlot = command.SaveSlot;
                         diskVersion = saved!.Version;
                         message = "Saved colony loaded.";
                         break;
@@ -257,14 +291,22 @@ sealed class ColonySession
                         break;
                     case "save":
                         if (stress is not null) throw new InvalidOperationException("Return to your colony to save.");
-                        Persist(program);
-                        message = "Colony saved to disk.";
+                        string? slot = command.SaveSlot ?? activeSlot;
+                        if (command.SaveSlot is not null &&
+                            (string.IsNullOrEmpty(command.SaveSlot) || File.Exists(SavePath(slot))))
+                            throw new InvalidOperationException("Choose a new, unused save name.");
+                        Persist(program,slot,command.SaveSlot is null ? diskVersion : 0);
+                        activeSlot = slot;
+                        diskVersion = 4;
+                        message = slot is null or "" ? "Colony saved to disk." : $"Colony saved as {slot}.";
                         break;
                     case "import":
                         if (stress is not null) throw new InvalidOperationException("Return to your colony to import.");
                         if (command.Revision != revision) throw new InvalidOperationException("Map changed. Try importing again.");
                         var imported = SpaceProgram.Restore(rules,command.Save);
-                        Persist(imported);
+                        Persist(imported,null,0);
+                        activeSlot = null;
+                        diskVersion = 4;
                         Open(imported);
                         message = "Colony imported and saved.";
                         break;
@@ -329,21 +371,20 @@ sealed class ColonySession
         }
     }
 
-    void Persist(SpaceProgram colony)
+    void Persist(SpaceProgram colony,string? slot,int existingVersion)
     {
-        var fullPath = Path.GetFullPath(path);
+        var fullPath = SavePath(slot);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         var temporary = fullPath + ".tmp";
         File.WriteAllText(temporary, JsonSerializer.Serialize(colony.Export(), json));
         if (File.Exists(fullPath))
         {
-            if (diskVersion == 0)
-                diskVersion = JsonSerializer.Deserialize<SaveData>(File.ReadAllText(fullPath),json)?.Version ?? 0;
-            string backup = fullPath + (diskVersion < 3 ? ".pre-v3" : ".pre-v4");
-            if (diskVersion is > 0 and < 4 && !File.Exists(backup)) File.Copy(fullPath,backup);
+            if (existingVersion == 0)
+                existingVersion = JsonSerializer.Deserialize<SaveData>(File.ReadAllText(fullPath),json)?.Version ?? 0;
+            string backup = fullPath + (existingVersion < 3 ? ".pre-v3" : ".pre-v4");
+            if (existingVersion is > 0 and < 4 && !File.Exists(backup)) File.Copy(fullPath,backup);
         }
         File.Move(temporary, fullPath, overwrite: true);
-        diskVersion = 4;
     }
 }
 

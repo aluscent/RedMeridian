@@ -41,7 +41,6 @@ function initializeLogistics() {
     cargoInputs.set(material.id,input);
     $("routeMaterial").add(new Option(material.name,material.id));
   }
-  $("logistics").ontoggle=()=>refreshLogistics().catch(error=>notice(error.message,true));
   $("baseSelect").onchange=event=>command("select-base",{base:event.target.value});
   $("destination").onchange=$("shipSelect").onchange=renderFlightQuote;
   $("dispatchShip").onsubmit=event=>{
@@ -86,14 +85,31 @@ function renderFlightQuote() {
     : "Choose an idle spacecraft and a destination. Build spacecraft from the assembly yard inspector.");
 }
 
+function setList(list,values,empty) {
+  if(values.length===0 && empty) values=[empty];
+  if(list.children.length===values.length && values.every((value,index)=>list.children[index].textContent===value)) return;
+  list.replaceChildren(...values.map(value=>{
+    const row=document.createElement("li");
+    row.textContent=value;
+    return row;
+  }));
+}
+
 async function refreshLogistics() {
-  if(!$("logistics").open || !state?.started) return;
+  if($("controlPanel").hidden || $("logistics").hidden && $("systemPanel").hidden || !state?.started) return;
   $("logistics").querySelector(".logistics").hidden=state.stress;
   if(state.stress) return;
   const response=await fetch("/api/logistics",{cache:"no-store"});
   if(!response.ok) throw new Error("Logistics data unavailable.");
   logistics=await response.json();
+  if($("controlPanel").hidden) return;
   const names=new Map(logistics.sites.map(site=>[site.id,site.name]));
+  if(!$("systemPanel").hidden) {
+    const known=logistics.legs.filter(leg=>leg.from===state.site.id).sort((a,b)=>a.distance-b.distance);
+    setList($("systemMap"),["Solar System (current system)",...known.map(leg=>
+      names.get(leg.to)+" — "+leg.distance+" distance units")]);
+    return;
+  }
   const bases=logistics.bases;
   const local=bases.find(base=>base.id===state.site.id);
   if(!local) return;
@@ -123,6 +139,10 @@ async function refreshLogistics() {
   setText($("spaceFacilities"),"Local facilities · assembly "+(local.assembly?"online":"offline")+
     " · cargo "+(local.dock?"online":"offline")+" · relay "+(local.relay?"online":"offline")+
     (orbitalResearch>=30?" · Orbital research objective complete":" · Orbital research objective: "+orbitalResearch+"/30 RP"));
+  setList($("assemblyOrders"),bases.flatMap(base=>base.orders.map(order=>{
+    const type=catalog.shipTypes.find(item=>item.id===order.type);
+    return type.name+" at "+names.get(base.id)+" — "+order.ticksLeft+" ticks"+(order.running?"":" (paused)");
+  })), "No spacecraft under construction.");
   pruneRows(fleetRows,logistics.ships.map(ship=>ship.id));
   for(const ship of logistics.ships) {
     let item=fleetRows.get(ship.id);
