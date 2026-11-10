@@ -10,10 +10,14 @@ sealed record DepositOverride(int X, int Y, string Deposit);
 sealed record StarterTile(int X, int Y, int Building);
 sealed record Metric(string Id, string Name, string Unit, int Initial, int Target);
 sealed record StormCycle(int Period, int Start, int End);
+sealed record PlanetSize(int Width, int Height)
+{
+    public bool Valid => Width >= 32 && Height >= 32 && (long)Width * Height is >= 8_000 and <= 14_000;
+}
 sealed record WorldRules(int StarterPopulation, int CrewPerColonist, int ColonistsPerRation,
     int ArrivalInterval, int ArrivalReserves, string[] LifeSupport, string ResearchMaterial,
     StormCycle Storm, int DepositBuckets, Deposit[] Deposits, DepositOverride[] DepositOverrides,
-    StarterTile[] Starter, Metric[] Metrics);
+    StarterTile[] Starter, Metric[] Metrics, Dictionary<string,PlanetSize>? PlanetSizes = null);
 
 sealed record Building
 {
@@ -71,6 +75,9 @@ sealed class GameRules
         World = Read<WorldRules>("world");
         Buildings = Read<Building[]>("buildings").OrderBy(b => b.Id).ToArray();
         ShipTypes = Read<ShipType[]>("spacecraft");
+        Require(World.PlanetSizes is null || World.PlanetSizes.All(entry =>
+            entry.Value is { Valid: true } && ColonySite.All.Any(site => site.Id == entry.Key && site.PlanetaryEngineering)),
+            "Planet sizes must cover 8,000–14,000 tiles, with both dimensions at least 32.");
 
         var materialIds = Unique(Materials.Select(m => m.Id), "material");
         var shipIds = Unique(ShipTypes.Select(ship => ship.Id), "spacecraft");
@@ -163,6 +170,8 @@ sealed class GameRules
                 Surface.Fits(tile.Y * Colony.Size + tile.X,Buildings[tile.Building - 1].Footprint) &&
                 Surface.Tiles(tile.Y * Colony.Size + tile.X,Buildings[tile.Building - 1].Footprint).All(starter.Add), "Invalid starter structure.");
             var b = Buildings[tile.Building - 1];
+            Require(NewSite(ColonySite.Mars).Contains(tile.Y * Colony.Size + tile.X,b.Footprint),
+                "Starter structure falls outside the Mars map.");
             Require(b.Deposit is null || b.Deposit == DepositAt(tile.Y * Colony.Size + tile.X),
                 $"Starter {b.Name} is missing its deposit.");
         }
@@ -205,6 +214,12 @@ sealed class GameRules
     }
 
     public Technology Technology(string id) => technologies[id];
+    public ColonySite NewSite(ColonySite site)
+    {
+        if (!site.PlanetaryEngineering) return site;
+        var dimensions = World.PlanetSizes?.GetValueOrDefault(site.Id) ?? new PlanetSize(100,100);
+        return site with { Width = dimensions.Width, Length = dimensions.Height };
+    }
     public ShipType ShipType(string? id) => ShipTypes.FirstOrDefault(ship => ship.Id == id)
         ?? throw new InvalidOperationException("Select a valid spacecraft type.");
 }

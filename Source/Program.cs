@@ -12,9 +12,10 @@ app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = context => context.Context.Response.Headers.CacheControl = "no-cache"
 });
-app.MapGet("/api/catalog", (GameRules rules) => new { rules.Buildings, rules.Materials, rules.Research, rules.World, rules.ShipTypes });
+app.MapGet("/api/catalog", (GameRules rules) => new { rules.Buildings, rules.Materials, rules.Research, rules.World, rules.ShipTypes,
+    landingSite = rules.NewSite(ColonySite.Mars) });
 app.MapGet("/api/state", (int? inspect, ColonySession session) => session.Read(inspect ?? -1));
-app.MapGet("/api/surface", (ColonySession session) => session.Surface());
+app.MapGet("/api/surface", (HttpContext context, ColonySession session) => session.Surface(context));
 app.MapGet("/api/map", (HttpContext context, ColonySession session) => session.Map(context));
 app.MapGet("/api/logistics", (ColonySession session) => session.Logistics());
 app.MapPost("/api/command", (Command command, ColonySession session) => session.Apply(command));
@@ -66,7 +67,7 @@ sealed class ColonySession
         path = Environment.GetEnvironmentVariable("RED_MERIDIAN_SAVE")
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "RedMeridian", developerMode ? "colony.test.json" : "colony.json");
-        program = new(rules, new Colony(rules));
+        program = new(rules, new Colony(rules,site: rules.NewSite(ColonySite.Mars)));
     }
 
     Colony Current => stress ?? program.Base(selectedBase);
@@ -74,7 +75,15 @@ sealed class ColonySession
         started,File.Exists(path),worldRevision,inspect,developerMode);
 
     public object Read(int inspect) { lock (gate) return State(inspect); }
-    public MapSettings Surface() { lock (gate) return Current.MapSettings; }
+    public MapSettings Surface(HttpContext context)
+    {
+        lock (gate)
+        {
+            context.Response.Headers["X-World-Revision"] = worldRevision.ToString();
+            context.Response.Headers.CacheControl = "no-store";
+            return Current.MapSettings;
+        }
+    }
     public object Logistics() { lock (gate) return program.Summary(); }
 
     void Open(SpaceProgram loaded)
@@ -95,12 +104,19 @@ sealed class ColonySession
         lock (gate)
         {
             context.Response.Headers["X-Map-Revision"] = revision.ToString();
+            context.Response.Headers["X-World-Revision"] = worldRevision.ToString();
             context.Response.Headers.CacheControl = "no-store";
-            int size = Current.Grid.Length;
-            var layout = new byte[size * 3];
-            Current.Grid.CopyTo(layout,0);
-            Current.Widths.CopyTo(layout,size);
-            Current.Heights.CopyTo(layout,2 * size);
+            var colony = Current;
+            var site = colony.Site;
+            int area = site.Width * site.Height;
+            var layout = new byte[area * 3];
+            for (int y = 0; y < site.Height; y++)
+            {
+                int start = (site.Top + y) * Colony.Size + site.Left, row = y * site.Width;
+                colony.Grid.AsSpan(start,site.Width).CopyTo(layout.AsSpan(row,site.Width));
+                colony.Widths.AsSpan(start,site.Width).CopyTo(layout.AsSpan(row+area,site.Width));
+                colony.Heights.AsSpan(start,site.Width).CopyTo(layout.AsSpan(row+2*area,site.Width));
+            }
             return Results.Bytes(layout, "application/octet-stream",
                 lastModified: null, entityTag: null, enableRangeProcessing: false);
         }
@@ -139,7 +155,7 @@ sealed class ColonySession
                 switch (command.Action)
                 {
                     case "new":
-                        Open(new(rules, new Colony(rules,map: command.Map)));
+                        Open(new(rules, new Colony(rules,map: command.Map,site: rules.NewSite(ColonySite.Mars))));
                         message = "Landed on the generated map.";
                         break;
                     case "load":

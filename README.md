@@ -1,5 +1,10 @@
 # Red Meridian — Map Edition
 
+New Mars maps have 10,000 tiles, and Venus outposts have 13,440. Adjust their
+dimensions under `planetSizes` in `Config/world.json` within the 8,000–14,000
+tile range. Existing colonies retain their saved bounds, and tester mode
+still offers the 100,000-structure stress map.
+
 Run **Start Red Meridian.cmd** and open http://127.0.0.1:5287/?v=map-4.
 Keep the server window open. The Windows build requires the ASP.NET Core 8 runtime.
 To build from source with the .NET 8 SDK, run
