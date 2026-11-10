@@ -2,7 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace RedMeridian.Domain;
 
-sealed record MapSettings(int Seed = 0, int Abundance = 100, Dictionary<int,string?>? Paint = null);
+sealed record MapSettings(int Seed = 0, int Abundance = 100, Dictionary<int,string?>? Paint = null,
+    bool DensityPercent = false);
 sealed record Footprint(int Width = 1,int Height = 1);
 sealed record MineUpgrade(int Multiplier, Dictionary<string,int> Cost, int ExtraPower = 0, int ExtraCrew = 0);
 sealed record SavedStructure(int Index,int Width = 1,int Height = 1,int Level = 1,bool Disabled = false);
@@ -20,7 +21,8 @@ sealed class Surface
     {
         this.rules = rules;
         settings ??= new();
-        if (settings.Abundance is < 0 or > 200 || settings.Paint?.Count > 16_384 ||
+        if ((settings.DensityPercent ? settings.Abundance is < 3 or > 15 : settings.Abundance is < 0 or > 200) ||
+            settings.Paint?.Count > 16_384 ||
             settings.Paint?.Any(pair => (uint)pair.Key >= owner.Length ||
                 pair.Value is not null && !rules.World.Deposits.Any(d => d.Id == pair.Value) ||
                 rules.FixedDeposit(pair.Key) is not null) == true)
@@ -31,7 +33,7 @@ sealed class Surface
     public string? DepositAt(int index)
     {
         if (Settings.Paint!.TryGetValue(index,out var deposit)) return deposit;
-        return rules.DepositAt(index,Settings.Seed,Settings.Abundance);
+        return rules.DepositAt(index,Settings.Seed,Settings.Abundance,Settings.DensityPercent);
     }
 
     public int AnchorAt(int index) => (uint)index < owner.Length ? owner[index] - 1 : -1;
@@ -64,11 +66,12 @@ sealed class Surface
     }
 }
 
-sealed class ProductionGroup(Building building)
+sealed class ProductionGroup(Building building, int sunlight = 100)
 {
     readonly SortedSet<int> members = new();
     int[]? order;
     public Building Building { get; } = building;
+    public int Sunlight { get; } = sunlight;
     public int Count => members.Count;
     public int Active { get; set; }
     public IEnumerable<int> ActiveMembers => members.Take(Active);

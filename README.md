@@ -80,14 +80,30 @@ the 100,000-structure stress map, and its pan test. Tester mode defaults to
 
 The launch screen previews the geology before the colony clock starts.
 Enter a signed 32-bit seed or roll one. The same seed, abundance, and paint
-produce the same deposit layout. Abundance controls deposit density from
-0% to 200% of the default distribution. Deposits are continuous sources.
+produce the same deposit layout. Abundance targets a 3%–15% share of tiles
+with natural deposits on new maps. Deposits are continuous sources.
 The starter iron and ice deposits are protected at every abundance setting.
 
 Open **Map editor** to paint any configured deposit, clear it, or restore the
 generated tile. Pan with the arrow buttons. The light outlines mark the
 starting outpost. **Export map** and **Import map** share terrain designs as
 JSON. A map design contains a seed, abundance, and paint overrides.
+
+## The Terminator
+
+Found the Terminator from **Space travel**. Open **Map climate** to view
+sunlight, temperature, and elevation overlays, or to change the base
+temperature and humidity. The temperature field uses fixed tile offsets.
+Humidity narrows those offsets and adds greenhouse warming above a configured
+threshold.
+
+Solar output follows local sunlight. Temperature limits apply to the entire
+footprint. Frozen oceans and dry seabeds can be built on. Melting or refilling
+can destroy buildings, including buildings on shore. After a flood, liquid
+shore can be built on again. Climate profiles and engineering duration live
+in `Config/world.json`, and building temperature limits live in
+`Config/buildings.json`. Planetary engineering requires at least 200 sols
+of effective work per metric from its starting value.
 
 **Load saved colony** reads `%LOCALAPPDATA%\RedMeridian\colony.json`.
 **Import colony file** loads a separate colony JSON file into that slot.

@@ -17,6 +17,7 @@ app.MapGet("/api/catalog", (GameRules rules) => new { rules.Buildings, rules.Mat
 app.MapGet("/api/state", (int? inspect, ColonySession session) => session.Read(inspect ?? -1));
 app.MapGet("/api/surface", (HttpContext context, ColonySession session) => session.Surface(context));
 app.MapGet("/api/map", (HttpContext context, ColonySession session) => session.Map(context));
+app.MapGet("/api/climate", (HttpContext context, ColonySession session) => session.Climate(context));
 app.MapGet("/api/logistics", (ColonySession session) => session.Logistics());
 app.MapPost("/api/command", (Command command, ColonySession session) => session.Apply(command));
 using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(250));
@@ -41,7 +42,7 @@ async Task TickLoop(ColonySession session, CancellationToken cancellation)
 record Command(string? Action, int Index = -1, int Type = 0, int Revision = -1, SaveData? Save = null,
     int EndIndex = -1, MapSettings? Map = null, string? Base = null, int Ship = 0,
     Dictionary<string,long>? Cargo = null, CargoRoute? Route = null, string? Technology = null,
-    string? Material = null, int Amount = 0, string? ShipType = null);
+    string? Material = null, int Amount = 0, string? ShipType = null, ClimateSettings? Climate = null);
 
 
 sealed class ColonySession
@@ -85,6 +86,15 @@ sealed class ColonySession
         }
     }
     public object Logistics() { lock (gate) return program.Summary(); }
+    public IResult Climate(HttpContext context)
+    {
+        lock (gate)
+        {
+            context.Response.Headers["X-World-Revision"] = worldRevision.ToString();
+            context.Response.Headers.CacheControl = "no-store";
+            return Results.Bytes(Current.ClimateMap(),"application/octet-stream");
+        }
+    }
 
     void Open(SpaceProgram loaded)
     {
@@ -155,8 +165,17 @@ sealed class ColonySession
                 switch (command.Action)
                 {
                     case "new":
-                        Open(new(rules, new Colony(rules,map: command.Map,site: rules.NewSite(ColonySite.Mars))));
+                        var map = (command.Map ?? new MapSettings(Abundance: 8)) with { DensityPercent = true };
+                        Open(new(rules, new Colony(rules,map: map,site: rules.NewSite(ColonySite.Mars))));
                         message = "Landed on the generated map.";
+                        break;
+                    case "climate":
+                        if (command.Revision != revision || command.Climate is null)
+                            throw new InvalidOperationException("Map changed or no climate settings supplied.");
+                        int flooded = Current.ChangeClimate(command.Climate);
+                        worldRevision++;
+                        revision++;
+                        message = flooded == 0 ? "Map climate updated." : $"Flooding demolished {flooded} structures.";
                         break;
                     case "load":
                         if (!File.Exists(path)) throw new InvalidOperationException("No saved colony on disk.");

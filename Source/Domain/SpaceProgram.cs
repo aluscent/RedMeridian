@@ -219,7 +219,8 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
         var stock = rules.Materials.ToDictionary(m => m.Id, _ => 0L);
         var colony = Colony.Restore(rules, new(4, [[center, solar], [center+1, habitat],
             [center+Colony.Size, dock], [center+Colony.Size+1, BuildingId("relay")]], null, 2, mars.Tick, null,
-            stock, new(), Map: new(site.Seed, site.Abundance), ActivatedResearch: [], LongOrbit: site.Kind == "orbit",
+            stock, new(), Map: new(site.Seed, site.Abundance, DensityPercent: site.Id == "terminator"),
+            ActivatedResearch: [], LongOrbit: site.Kind == "orbit",
             PlanetBounds: site.PlanetaryEngineering ? new(site.Width,site.Height) : null), site);
         mars.ShareResearchWith(colony);
         return colony;

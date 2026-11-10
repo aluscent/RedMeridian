@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace RedMeridian.Domain;
 
 sealed record Material(string Id, string Name, string Symbol, long Initial);
-sealed record Technology(string Id, string Name, long Points, string[] Requires);
+sealed record Technology(string Id, string Name, long Points, string[] Requires, long? LegacyPoints = null);
 sealed record ShipType(string Id, string Name, int Payload, int FuelPercent, int BuildTicks, Dictionary<string,int> Cost);
 sealed record Deposit(string Id, string Name, int[] Buckets, string[] Colors);
 sealed record DepositOverride(int X, int Y, string Deposit);
@@ -17,7 +17,8 @@ sealed record PlanetSize(int Width, int Height)
 sealed record WorldRules(int StarterPopulation, int CrewPerColonist, int ColonistsPerRation,
     int ArrivalInterval, int ArrivalReserves, string[] LifeSupport, string ResearchMaterial,
     StormCycle Storm, int DepositBuckets, Deposit[] Deposits, DepositOverride[] DepositOverrides,
-    StarterTile[] Starter, Metric[] Metrics, Dictionary<string,PlanetSize>? PlanetSizes = null);
+    StarterTile[] Starter, Metric[] Metrics, Dictionary<string,PlanetSize>? PlanetSizes = null,
+    Dictionary<string,ClimateProfile>? Climates = null, int EngineeringSols = 200);
 
 sealed record Building
 {
@@ -47,6 +48,8 @@ sealed record Building
     public string? SpaceRole { get; init; }
     public string? Deposit { get; init; }
     public string? Research { get; init; }
+    public int? MinimumTemperature { get; init; }
+    public int? MaximumTemperature { get; init; }
 }
 
 sealed class GameRules
@@ -75,6 +78,10 @@ sealed class GameRules
         World = Read<WorldRules>("world");
         Buildings = Read<Building[]>("buildings").OrderBy(b => b.Id).ToArray();
         ShipTypes = Read<ShipType[]>("spacecraft");
+        Require(World.EngineeringSols is >= 200 and <= 100_000, "Invalid minimum planetary engineering duration.");
+        Require(World.Climates is null || World.Climates.All(item => item.Value is { Valid: true } &&
+            ColonySite.All.Any(site => site.Id == item.Key && site.PlanetaryEngineering && site.Kind != "mars")),
+            "Invalid map climate profile.");
         Require(World.PlanetSizes is null || World.PlanetSizes.All(entry =>
             entry.Value is { Valid: true } && ColonySite.All.Any(site => site.Id == entry.Key && site.PlanetaryEngineering)),
             "Planet sizes must cover 8,000–14,000 tiles, with both dimensions at least 32.");
@@ -136,6 +143,9 @@ sealed class GameRules
             "Building IDs must be consecutive from 1 through the last building, at most 255.");
         foreach (var b in Buildings)
         {
+            Require((b.MinimumTemperature is null or >= -500 and <= 500) &&
+                (b.MaximumTemperature is null or >= -500 and <= 500) &&
+                (b.MinimumTemperature ?? -500) <= (b.MaximumTemperature ?? 500), $"Invalid temperature range for {b.Name}.");
             bool Amounts(Dictionary<string,int> amounts, HashSet<string> ids) =>
                 amounts.All(entry => ids.Contains(entry.Key) && entry.Value is > 0 and <= 1000);
             Require(!string.IsNullOrWhiteSpace(b.Name) && !string.IsNullOrWhiteSpace(b.Category) &&
@@ -192,12 +202,15 @@ sealed class GameRules
 
     public string? FixedDeposit(int index) => depositOverrides.GetValueOrDefault(index);
 
-    public string? DepositAt(int index,int seed = 0,int abundance = 100)
+    public string? DepositAt(int index,int seed = 0,int abundance = 100,bool densityPercent = false)
     {
         if (depositOverrides.TryGetValue(index,out string? deposit)) return deposit;
         uint hash = unchecked((uint)(index * 0x9e3779b9) ^ (uint)seed);
         hash = unchecked((hash ^ (hash >> 16)) * 0x7feb352du);
         hash ^= hash >> 15;
+        if (densityPercent)
+            return World.Deposits.Length > 0 && hash % 100 < abundance
+                ? World.Deposits[(hash / 100) % World.Deposits.Length].Id : null;
         string? natural = depositBuckets[hash % depositBuckets.Length];
         uint variation = (hash / (uint)depositBuckets.Length) % 100;
         if (natural is not null) return variation < abundance ? natural : null;
@@ -210,7 +223,8 @@ sealed class GameRules
     public bool Unlocked(string id,long points)
     {
         var tech = technologies[id];
-        return points >= tech.Points && tech.Requires.All(prerequisite => Unlocked(prerequisite,points));
+        return points >= (tech.LegacyPoints ?? tech.Points) &&
+            tech.Requires.All(prerequisite => Unlocked(prerequisite,points));
     }
 
     public Technology Technology(string id) => technologies[id];

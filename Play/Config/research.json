@@ -2,67 +2,76 @@
   {
     "id": "thermal",
     "name": "Atmospheric heating",
-    "points": 18,
-    "requires": []
+    "points": 180,
+    "requires": [],
+    "legacyPoints": 18
   },
   {
     "id": "algae",
     "name": "Bioreactors",
-    "points": 30,
-    "requires": []
+    "points": 300,
+    "requires": [],
+    "legacyPoints": 30
   },
   {
     "id": "hydrology",
     "name": "Hydrological engineering",
-    "points": 45,
-    "requires": []
+    "points": 450,
+    "requires": [],
+    "legacyPoints": 45
   },
   {
     "id": "survey",
     "name": "Geophysical surveying",
-    "points": 9,
-    "requires": []
+    "points": 90,
+    "requires": [],
+    "legacyPoints": 9
   },
   {
     "id": "grid",
     "name": "Planetary power systems",
-    "points": 24,
+    "points": 240,
     "requires": [
       "survey"
-    ]
+    ],
+    "legacyPoints": 24
   },
   {
     "id": "habitats",
     "name": "Settlement engineering",
-    "points": 36,
+    "points": 360,
     "requires": [
       "survey"
-    ]
+    ],
+    "legacyPoints": 36
   },
   {
     "id": "deep",
     "name": "Deep-core science",
-    "points": 60,
+    "points": 600,
     "requires": [
       "survey"
-    ]
+    ],
+    "legacyPoints": 60
   },
   {
     "id": "fission",
     "name": "Compact fission",
-    "points": 90,
+    "points": 900,
     "requires": [
       "deep",
       "grid"
-    ]
+    ],
+    "legacyPoints": 90
   },
   {
     "id": "orbital",
     "name": "Orbital infrastructure",
-    "points": 150,
+    "points": 1500,
     "requires": [
       "deep",
       "habitats"
-    ]
+    ],
+    "legacyPoints": 150
   }
 ]

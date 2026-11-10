@@ -12,6 +12,8 @@ function makeGeology(catalog, deposits) {
     let hash=Math.imul(index,0x9e3779b9)^map.seed;
     hash=Math.imul(hash^(hash>>>16),0x7feb352d);
     hash=(hash^(hash>>>15))>>>0;
+    if(map.densityPercent)
+      return deposits.length && hash%100<map.abundance ? deposits[Math.floor(hash/100)%deposits.length] : null;
     const deposit=buckets[hash%buckets.length];
     const quotient=Math.floor(hash/buckets.length);
     const variation=quotient%100;
@@ -37,7 +39,7 @@ function createMapEditor(catalog, deposits, geology, start) {
   const seed=el("seed");
   const brush=el("brush");
   for(const d of deposits) brush.add(new Option(d.name,d.id));
-  const model=()=>({seed:Number(seed.value)||0,abundance:Number(abundance.value),paint:{...paint}});
+  const model=()=>({seed:Number(seed.value)||0,abundance:Number(abundance.value),paint:{...paint},densityPercent:true});
   function draw() {
     const map=model();
     el("abundanceValue").textContent=abundance.value+"%";
@@ -127,7 +129,7 @@ function createMapEditor(catalog, deposits, geology, start) {
       if(file.size>1_000_000) throw new Error("Map file is too large.");
       const data=JSON.parse(await file.text());
       if(!Number.isInteger(data.seed) || data.seed<-(2**31) || data.seed>=2**31 ||
-        !Number.isInteger(data.abundance) || data.abundance<0 || data.abundance>200 ||
+        !Number.isInteger(data.abundance) || data.abundance<3 || data.abundance>15 ||
         !data.paint || Array.isArray(data.paint) || typeof data.paint!=="object") throw new Error("Invalid map file.");
       const tiles=Object.entries(data.paint);
       if(tiles.length>16384 || tiles.some(([key,id])=>!/^\d+$/.test(key) || String(Number(key))!==key ||

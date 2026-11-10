@@ -1,7 +1,17 @@
 {
   "planetSizes": {
-    "mars": { "width": 100, "height": 100 },
-    "venus": { "width": 112, "height": 120 }
+    "mars": {
+      "width": 100,
+      "height": 100
+    },
+    "venus": {
+      "width": 112,
+      "height": 120
+    },
+    "terminator": {
+      "width": 108,
+      "height": 110
+    }
   },
   "starterPopulation": 4,
   "crewPerColonist": 2,
@@ -192,5 +202,18 @@
       "initial": 0,
       "target": 300
     }
-  ]
+  ],
+  "climates": {
+    "terminator": {
+      "baseTemperature": 0,
+      "humidity": 0,
+      "offsetSpan": 100,
+      "attenuation": 125,
+      "greenhouseStart": 50,
+      "greenhouseMax": 35,
+      "freezeAt": 0,
+      "dryAt": 45
+    }
+  },
+  "engineeringSols": 200
 }

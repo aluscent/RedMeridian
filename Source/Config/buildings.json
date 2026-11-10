@@ -6,7 +6,7 @@
     "art": "solar",
     "image": "assets/solar-array.png",
     "cost": {
-      "alloy": 4
+      "alloy": 20
     },
     "generation": 8,
     "stormGeneration": 3,
@@ -15,7 +15,9 @@
       "planet": "assets/solar-array.png",
       "orbit": "assets/orbit/solar-array.png",
       "asteroid": "assets/asteroid/solar-array.png"
-    }
+    },
+    "minimumTemperature": -120,
+    "maximumTemperature": 110
   },
   {
     "id": 2,
@@ -24,7 +26,7 @@
     "art": "mine",
     "image": "assets/iron-mine.png",
     "cost": {
-      "alloy": 5
+      "alloy": 25
     },
     "power": 2,
     "crew": 2,
@@ -66,7 +68,7 @@
     "art": "extractor",
     "image": "assets/ice-extractor.png",
     "cost": {
-      "alloy": 5
+      "alloy": 25
     },
     "power": 2,
     "crew": 2,
@@ -99,7 +101,9 @@
       "planet": "assets/ice-extractor.png",
       "orbit": "assets/orbit/ice-extractor.png",
       "asteroid": "assets/asteroid/ice-extractor.png"
-    }
+    },
+    "minimumTemperature": -70,
+    "maximumTemperature": -10
   },
   {
     "id": 4,
@@ -108,7 +112,7 @@
     "art": "greenhouse",
     "image": "assets/greenhouse.png",
     "cost": {
-      "alloy": 6
+      "alloy": 30
     },
     "power": 2,
     "crew": 2,
@@ -124,7 +128,9 @@
       "planet": "assets/greenhouse.png",
       "orbit": "assets/orbit/greenhouse.png",
       "asteroid": "assets/asteroid/greenhouse.png"
-    }
+    },
+    "minimumTemperature": -20,
+    "maximumTemperature": 40
   },
   {
     "id": 5,
@@ -133,7 +139,7 @@
     "art": "refinery",
     "image": "assets/refinery.png",
     "cost": {
-      "alloy": 8
+      "alloy": 40
     },
     "power": 3,
     "crew": 2,
@@ -158,7 +164,7 @@
     "art": "habitat",
     "image": "assets/habitat.png",
     "cost": {
-      "alloy": 10
+      "alloy": 50
     },
     "power": 1,
     "beds": 8,
@@ -168,7 +174,9 @@
       "planet": "assets/habitat.png",
       "orbit": "assets/orbit/habitat.png",
       "asteroid": "assets/asteroid/habitat.png"
-    }
+    },
+    "minimumTemperature": -35,
+    "maximumTemperature": 45
   },
   {
     "id": 7,
@@ -177,7 +185,7 @@
     "art": "lab",
     "image": "assets/research-lab.png",
     "cost": {
-      "alloy": 12
+      "alloy": 60
     },
     "power": 3,
     "crew": 2,
@@ -202,7 +210,7 @@
     "art": "heat",
     "image": "assets/heat-plant.png",
     "cost": {
-      "alloy": 18
+      "alloy": 90
     },
     "power": 4,
     "crew": 3,
@@ -229,7 +237,7 @@
     "art": "algae",
     "image": "assets/algae-dome.png",
     "cost": {
-      "alloy": 22
+      "alloy": 110
     },
     "power": 4,
     "crew": 3,
@@ -255,7 +263,7 @@
     "art": "waterworks",
     "image": "assets/waterworks.png",
     "cost": {
-      "alloy": 24
+      "alloy": 120
     },
     "power": 4,
     "crew": 3,
@@ -281,7 +289,7 @@
     "art": "battery",
     "image": "assets/battery-bank.png",
     "cost": {
-      "alloy": 8
+      "alloy": 40
     },
     "storage": 24,
     "chargeRate": 6,
@@ -300,8 +308,8 @@
     "art": "wind",
     "image": "assets/wind-turbine.png",
     "cost": {
-      "alloy": 12,
-      "silicon": 2
+      "alloy": 60,
+      "silicon": 10
     },
     "generation": 5,
     "stormGeneration": 10,
@@ -320,8 +328,8 @@
     "art": "heat",
     "image": "assets/geothermal-station.png",
     "cost": {
-      "alloy": 20,
-      "titanium": 4
+      "alloy": 100,
+      "titanium": 20
     },
     "generation": 18,
     "deposit": "vent",
@@ -345,8 +353,8 @@
     "art": "battery",
     "image": "assets/fuel-cell-plant.png",
     "cost": {
-      "alloy": 16,
-      "silicon": 4
+      "alloy": 80,
+      "silicon": 20
     },
     "generation": 24,
     "inputs": {
@@ -367,9 +375,9 @@
     "art": "reactor",
     "image": "assets/fission-reactor.png",
     "cost": {
-      "alloy": 36,
-      "titanium": 12,
-      "silicon": 8
+      "alloy": 180,
+      "titanium": 60,
+      "silicon": 40
     },
     "generation": 70,
     "crew": 3,
@@ -395,7 +403,7 @@
     "art": "mine",
     "image": "assets/silica-quarry.png",
     "cost": {
-      "alloy": 9
+      "alloy": 45
     },
     "power": 3,
     "crew": 2,
@@ -438,7 +446,7 @@
     "art": "mine",
     "image": "assets/titanium-mine.png",
     "cost": {
-      "alloy": 13
+      "alloy": 65
     },
     "power": 4,
     "crew": 2,
@@ -481,7 +489,7 @@
     "art": "extractor",
     "image": "assets/brine-well.png",
     "cost": {
-      "alloy": 9
+      "alloy": 45
     },
     "power": 3,
     "crew": 2,
@@ -515,7 +523,9 @@
       "planet": "assets/brine-well.png",
       "orbit": "assets/orbit/brine-well.png",
       "asteroid": "assets/asteroid/brine-well.png"
-    }
+    },
+    "minimumTemperature": -30,
+    "maximumTemperature": 35
   },
   {
     "id": 19,
@@ -524,8 +534,8 @@
     "art": "mine",
     "image": "assets/uranium-mine.png",
     "cost": {
-      "alloy": 16,
-      "titanium": 3
+      "alloy": 80,
+      "titanium": 15
     },
     "power": 5,
     "crew": 2,
@@ -568,7 +578,7 @@
     "art": "waterworks",
     "image": "assets/desalination-plant.png",
     "cost": {
-      "alloy": 12
+      "alloy": 60
     },
     "power": 3,
     "crew": 2,
@@ -594,8 +604,8 @@
     "art": "refinery",
     "image": "assets/propellant-works.png",
     "cost": {
-      "alloy": 18,
-      "silicon": 4
+      "alloy": 90,
+      "silicon": 20
     },
     "power": 5,
     "crew": 2,
@@ -621,7 +631,7 @@
     "art": "shelter",
     "image": "assets/crew-shelter.png",
     "cost": {
-      "alloy": 5
+      "alloy": 25
     },
     "power": 1,
     "beds": 3,
@@ -631,7 +641,9 @@
       "planet": "assets/crew-shelter.png",
       "orbit": "assets/orbit/crew-shelter.png",
       "asteroid": "assets/asteroid/crew-shelter.png"
-    }
+    },
+    "minimumTemperature": -55,
+    "maximumTemperature": 50
   },
   {
     "id": 23,
@@ -640,8 +652,8 @@
     "art": "tower",
     "image": "assets/habitat-block.png",
     "cost": {
-      "alloy": 24,
-      "silicon": 6
+      "alloy": 120,
+      "silicon": 30
     },
     "power": 3,
     "beds": 28,
@@ -665,9 +677,9 @@
     "art": "algae",
     "image": "assets/settlement-dome.png",
     "cost": {
-      "alloy": 44,
-      "titanium": 12,
-      "silicon": 12
+      "alloy": 220,
+      "titanium": 60,
+      "silicon": 60
     },
     "power": 7,
     "beds": 72,
@@ -691,8 +703,8 @@
     "art": "drill",
     "image": "assets/core-drilling-facility.png",
     "cost": {
-      "alloy": 26,
-      "titanium": 6
+      "alloy": 130,
+      "titanium": 30
     },
     "power": 8,
     "crew": 4,
@@ -723,9 +735,9 @@
     "art": "launch",
     "image": "assets/space-launch-site.png",
     "cost": {
-      "alloy": 55,
-      "titanium": 16,
-      "silicon": 10
+      "alloy": 275,
+      "titanium": 80,
+      "silicon": 50
     },
     "power": 12,
     "crew": 6,
@@ -756,8 +768,8 @@
     "art": "greenhouse",
     "image": "assets/hydroponics-hall.png",
     "cost": {
-      "alloy": 18,
-      "silicon": 4
+      "alloy": 90,
+      "silicon": 20
     },
     "power": 4,
     "crew": 3,
@@ -778,7 +790,9 @@
       "planet": "assets/hydroponics-hall.png",
       "orbit": "assets/orbit/hydroponics-hall.png",
       "asteroid": "assets/asteroid/hydroponics-hall.png"
-    }
+    },
+    "minimumTemperature": -20,
+    "maximumTemperature": 40
   },
   {
     "id": 28,
@@ -787,7 +801,7 @@
     "art": "lab",
     "image": "assets/research-lab.png",
     "cost": {
-      "alloy": 8
+      "alloy": 40
     },
     "power": 2,
     "crew": 1,
@@ -807,7 +821,7 @@
     "art": "lab",
     "image": "assets/research-lab.png",
     "cost": {
-      "alloy": 10
+      "alloy": 50
     },
     "power": 1,
     "priority": 22,
@@ -826,7 +840,7 @@
     "art": "launch",
     "image": "assets/space-launch-site.png",
     "cost": {
-      "alloy": 20
+      "alloy": 100
     },
     "power": 3,
     "priority": 26,
@@ -845,7 +859,7 @@
     "art": "refinery",
     "image": "assets/refinery.png",
     "cost": {
-      "alloy": 12
+      "alloy": 60
     },
     "power": 1,
     "priority": 23,
@@ -864,7 +878,7 @@
     "art": "habitat",
     "image": "assets/habitat.png",
     "cost": {
-      "alloy": 12
+      "alloy": 60
     },
     "power": 1,
     "priority": 23,
@@ -874,6 +888,8 @@
       "planet": "assets/habitat.png",
       "orbit": "assets/orbit/habitat.png",
       "asteroid": "assets/asteroid/habitat.png"
-    }
+    },
+    "minimumTemperature": -35,
+    "maximumTemperature": 45
   }
 ]
