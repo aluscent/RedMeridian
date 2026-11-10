@@ -24,26 +24,27 @@ sealed partial class Colony
             weatherForecasts.Count == 0 ? null : new(weatherForecasts), ActivatedResearch: activatedResearch.ToArray(),
             LongOrbit: Site.Kind == "orbit" && Site.Height == 150, Assembly: assemblyOrders.Values.ToArray(),
             PlanetBounds: Site.PlanetaryEngineering && Site.Width != Size ? new(Site.Width,Site.Height) : null,
-            Climate: climate?.Settings, EngineeringCredit: engineeringCredit.Count > 0 ? new(engineeringCredit) : null);
+            Climate: climate?.Settings, EngineeringCredit: engineeringCredit.Count > 0 ? new(engineeringCredit) : null,
+            MigrationCredit: migrationCredit);
     }
 
     public static Colony Restore(GameRules rules,SaveData? save,ColonySite? site = null)
     {
         if (save is null || save.Version is not (1 or 2 or 3 or 4) || save.Tiles is null ||
             save.Tiles.Length > Size * Size || save.Population is < 0 or > MaxPopulation ||
-            save.Tick is < 0 or >= long.MaxValue || save.Charge < 0)
+            save.Tick is < 0 or >= long.MaxValue || save.Charge < 0 || save.MigrationCredit is < 0 or >= 100)
             throw new InvalidOperationException("Invalid colony save.");
         if (site?.Kind == "orbit" && !save.LongOrbit) site = site with { Width = 16, Length = null };
         if (save.PlanetBounds is { } bounds)
         {
             site ??= ColonySite.Mars;
-            if (!site.PlanetaryEngineering || !bounds.Valid)
+            if (!site.PlanetaryEngineering || !bounds.ValidFor(site.Id))
                 throw new InvalidOperationException("Invalid saved planet size.");
             site = site with { Width = bounds.Width, Length = bounds.Height };
         }
         var colony = new Colony(rules,map: save.Version == 4 ? save.Map : null,empty: true,site: site,
             climateSettings: save.Climate)
-            { population = save.Population, tick = save.Tick };
+            { population = save.Population, tick = save.Tick, migrationCredit = save.MigrationCredit };
         var structures = new Dictionary<int,SavedStructure>();
         if (save.Version == 4 && save.Structures is not null)
         {
@@ -61,7 +62,7 @@ sealed partial class Colony
             var details = structures.Remove(index,out var saved) ? saved : new SavedStructure(index);
             var shape = new Footprint(details.Width,details.Height);
             if (!colony.Site.Contains(index,shape) || !colony.Site.Allows(rules.Buildings[type - 1], restoring: true) ||
-                !colony.surface.Open(index,shape) || !colony.TerrainAllows(index,shape) ||
+                !colony.surface.Open(index,shape) || !colony.TerrainAllows(index,shape,restoring: true) ||
                 details.Level < 1 || details.Level > colony.groups[type - 1].Length)
                 throw new InvalidOperationException("Invalid footprint, overlap or upgrade level in save.");
             colony.Place(index,type,shape,details.Level,details.Disabled);

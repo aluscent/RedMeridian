@@ -36,7 +36,17 @@ sealed class TileClimate(ColonySite site, int seed, ClimateProfile profile, Clim
     {
         int x = index % Colony.Size, y = index / Colony.Size;
         // A stable landing shelf leaves the first habitat and port above the shoreline.
-        if (Math.Abs(x-511) <= 2 && Math.Abs(y-511) <= 2) return 8;
+        int shelfDistance = Math.Max(0,Math.Abs(x-511)-2) + Math.Max(0,Math.Abs(y-511)-2);
+        if (shelfDistance == 0) return 8;
+        if (site.Id == "terminator" && site.Width <= 30)
+        {
+            // The maximum slope of these waves is below two levels per tile.
+            double relief = 7.5 + 5.8*Math.Sin((y-site.Top)*.16 + (seed & 255)) +
+                2.2*Math.Sin((x-site.Left)*.31 + ((seed >> 8) & 255)) +
+                .7*Math.Sin(((x-site.Left)+(y-site.Top))*.46 + ((seed >> 16) & 255));
+            int rise = Math.Min(8,shelfDistance)*2;
+            return Math.Clamp((int)Math.Round(relief),Math.Max(0,8-rise),Math.Min(15,8+rise));
+        }
         int band = (int)Math.Round(7.5 + 4.5*Math.Sin((y-site.Top)*.17 + (seed & 255)) +
             2*Math.Sin((x-site.Left)*.13 + ((seed >> 8) & 255)));
         return Math.Clamp(band+Noise(index,0x165667b1,5)-2,0,15);
@@ -48,6 +58,12 @@ sealed class TileClimate(ColonySite site, int seed, ClimateProfile profile, Clim
         int x = index % Colony.Size - site.Left;
         int offset = (x*2*profile.OffsetSpan*10 / (site.Width-1))-profile.OffsetSpan*10 +
             (Noise(index,0x27d4eb2d,15)-7)*10;
+        if (site.Id == "terminator" && site.Width <= 30)
+        {
+            int fromEdge = Math.Min(x,site.Width-1-x);
+            if (fromEdge < 5)
+                offset = (x < 5 ? -1 : 1) * profile.OffsetSpan * (50-fromEdge) / 5;
+        }
         return profile.EffectiveBase(current)+profile.AdjustOffset(offset,current.Humidity);
     }
 
@@ -73,8 +89,19 @@ sealed class TileClimate(ColonySite site, int seed, ClimateProfile profile, Clim
 
 sealed partial class Colony
 {
-    bool TerrainAllows(int index,Footprint shape) =>
-        climate is null || Surface.Tiles(index,shape).All(climate.Buildable);
+    bool TerrainAllows(int index,Footprint shape,bool restoring = false)
+    {
+        if (climate is null) return true;
+        int low = 15, high = 0;
+        foreach (int tile in Surface.Tiles(index,shape))
+        {
+            if (!climate.Buildable(tile)) return false;
+            int elevation = climate.Elevation(tile);
+            low = Math.Min(low,elevation);
+            high = Math.Max(high,elevation);
+        }
+        return restoring || high-low <= 2;
+    }
 
     bool TemperatureAllows(int index,Building building,Footprint shape)
     {
