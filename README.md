@@ -89,6 +89,14 @@ generated tile. Pan with the arrow buttons. The light outlines mark the
 starting outpost. **Export map** and **Import map** share terrain designs as
 JSON. A map design contains a seed, abundance, and paint overrides.
 
+## Developer sprite preview
+
+Run `node Tools/sprite-preview.mjs` and open `http://127.0.0.1:5290`.
+The page loads the source catalog, artwork, terrain, and renderer without
+starting the game or opening a save. Compare up to three adjacent buildings
+on planetary or orbital terrain. Change the direction, spacing, and footprint
+outlines to check how the sprites align and overlap.
+
 ## The Terminator
 
 Found the Terminator from **Space travel**. Open **Map climate** to view
