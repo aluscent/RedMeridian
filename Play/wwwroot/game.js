@@ -98,17 +98,20 @@ function footprint(x,y,w,h,color,stroke,target=ctx) {
 function blocked(x,y,recipe) {
   const {width:w,height:h}=recipe.footprint;
   if(!inside([x+w-1,y+h-1]) || (recipe.deposit && deposit(y*size+x)?.id!==recipe.deposit)) return true;
+  let low=15, high=0;
   for(let dy=0;dy<h;dy++) for(let dx=0;dx<w;dx++) {
     const cell=mapOffset(x+dx,y+dy);
     if(owners[cell]) return true;
     if(climateData) {
       const elevation=climateData.getUint8(cell*5), water=climateData.getUint8(cell*5+4);
       if(elevation===0 || elevation===15 || (water===2 && elevation<6)) return true;
+      low=Math.min(low,elevation);
+      high=Math.max(high,elevation);
     }
   }
-  return false;
+  return high-low>2;
 }
-function climateColor(cell) {
+function climateColor(cell,x,y) {
   const at=cell*5;
   const elevation=climateData.getUint8(at), water=climateData.getUint8(at+4);
   if(climateOverlay==="elevation") return "hsla("+(220-elevation*12)+",70%,50%,.70)";
@@ -117,8 +120,18 @@ function climateColor(cell) {
     const temperature=climateData.getInt16(at+2,true);
     return "hsla("+(220-Math.max(0,Math.min(220,(temperature+800)/8)))+",80%,55%,.65)";
   }
-  if(elevation===0 || elevation===15) return "#171c26d0";
-  return [null,"#addbefe0","#174d83da","#b5874378"][water];
+  const sun=climateData.getUint8(at+1)/100;
+  const temperature=climateData.getInt16(at+2,true)/10;
+  const east=x+1<mapSite.left+mapSite.width ? climateData.getUint8((cell+1)*5) : elevation;
+  const south=y+1<mapSite.top+mapSite.height ? climateData.getUint8((cell+mapSite.width)*5) : elevation;
+  const relief=elevation*.7+(elevation-east)*2+(south-elevation);
+  const light=14+sun*33+relief;
+  if(elevation===0 || elevation===15) return "hsla(220,22%,"+light*.58+"%,.84)";
+  if(water===2) return "hsl("+(224-elevation*4)+",64%,"+(light*.58+elevation*5)+"%)";
+  if(water===1) return "hsl(200,56%,"+(light*.65+34)+"%)";
+  const warmth=Math.max(-1,Math.min(1,temperature/50));
+  return "hsla("+(warmth<0 ? 220+warmth*12 : 38-warmth*32)+","+
+    (32+Math.abs(warmth)*42)+"%,"+light+"%,"+(water===3 ? .73 : .58)+")";
 }
 function terrainShade(x,y) {
   const grain = Math.imul(x+19,374761393)^Math.imul(y+13,668265263);
@@ -160,7 +173,7 @@ function terrainChunk(left,top,right,bottom,raster) {
         const ore=deposit((top+y)*size+left+x);
         g.drawImage(tileSprites[shade+(ore?ore.index*8:0)],px-49,py);
         if(climateData) {
-          const color=climateColor(mapOffset(left+x,top+y));
+          const color=climateColor(mapOffset(left+x,top+y),left+x,top+y);
           if(color) Sprites.polygon(g,[[px,py],[px+48,py+24],[px,py+48],[px-48,py+24]],color);
         }
       }
@@ -405,6 +418,7 @@ function buildingDetail(recipe) {
     recipe.storage && recipe.storage+" charge · +"+recipe.chargeRate+" / −"+recipe.dischargeRate+" per tick",
     (recipe.footprint.width>1 || recipe.footprint.height>1) && recipe.footprint.width+"×"+recipe.footprint.height+" tiles",
     recipe.beds && recipe.beds+" beds",
+    recipe.colonistsPerHour && "+"+recipe.colonistsPerHour+" colonist / hour",
     input || output || effects ? [input,[output,effects].filter(Boolean).join(" + ")].filter(Boolean).join(" → ") : "",
     recipe.power && recipe.power+" power",
     recipe.crew && recipe.crew+" crew"

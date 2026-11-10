@@ -15,6 +15,8 @@ var rules = new GameRules(Path.Combine(AppContext.BaseDirectory, "Config"));
     ("Recurring routes respect reserves and avoid counting inbound cargo twice", RecurringCargo),
     ("Assembly pauses offline and preserves typed orders through saves", TimedAssembly),
     ("Planetary engineering requires long-term investment and runs only on planets", PlanetaryEngineering),
+    ("Meridian terrain has bounded slopes and rejects steep footprints", MeridianTerrain),
+    ("Mars migration accrues fractional growth and staffed facilities add colonists", PopulationGrowth),
     ("Climate is seeded and humidity narrows both sides of the temperature band", ClimateMath),
     ("Ocean transitions remove whole footprints once and preserve usable shore", OceanTransitions),
     ("Climate controls solar output and suspends and restores extractors", ClimateOperation),
@@ -339,6 +341,62 @@ void ClimateMath()
     Equal(0, profile.AdjustOffset(0,20));
     Equal(true, profile.EffectiveBase(new(0,100)) > profile.EffectiveBase(new(0,20)));
     Equal(true, Math.Abs(profile.AdjustOffset(-200,100)) < 150);
+}
+
+void MeridianTerrain()
+{
+    var site = Terminator();
+    Equal(30,site.Width);
+    Equal(360,site.Height);
+    var terrain = new TileClimate(site,site.Seed,TerminatorProfile(),new(200,0));
+    int left = site.Top*Colony.Size+site.Left;
+    int right = left+site.Width-1;
+    for (int edge = 0; edge < 4; edge++)
+    {
+        Equal(true,terrain.Temperature(left+edge) < terrain.Temperature(left+edge+1));
+        Equal(true,terrain.Temperature(right-edge) > terrain.Temperature(right-edge-1));
+    }
+    foreach (int index in TerminatorTiles())
+    {
+        if (site.Contains(index+1,new())) Equal(true,Math.Abs(terrain.Elevation(index+1)-terrain.Elevation(index)) <= 2);
+        if (site.Contains(index+Colony.Size,new())) Equal(true,Math.Abs(terrain.Elevation(index+Colony.Size)-terrain.Elevation(index)) <= 2);
+    }
+
+    var colony = new Colony(rules,empty: true,site: site,climateSettings: new(200,0));
+    var building = rules.Buildings.First(b => b.Footprint is { Width: 2, Height: 2 });
+    int steep = TerminatorTiles().First(index => site.Contains(index,building.Footprint) &&
+        Surface.Tiles(index,building.Footprint).All(terrain.Buildable) &&
+        Surface.Tiles(index,building.Footprint).Max(terrain.Elevation) -
+        Surface.Tiles(index,building.Footprint).Min(terrain.Elevation) > 2);
+    Reject(() => colony.Build(steep,building.Id));
+    var legacy = Colony.Restore(rules,colony.Export() with { PlanetBounds = new(108,110) },site);
+    Equal(108,legacy.Site.Width);
+}
+
+void PopulationGrowth()
+{
+    var colony = new Colony(rules);
+    for (int hour = 0; hour < 24*6; hour++) colony.Step();
+    var save = colony.Export();
+    Equal(4,save.Population);
+    Equal(96,save.MigrationCredit);
+    colony = Colony.Restore(rules,save);
+    for (int hour = 0; hour < 6; hour++) colony.Step();
+    Equal(5,colony.Export().Population);
+
+    var solar = rules.Buildings.Single(b => b.Art == "solar");
+    var habitat = rules.Buildings.First(b => b.Art == "habitat");
+    var facility = rules.Buildings.Single(b => b.ColonistsPerHour > 0);
+    int anchor = 511*Colony.Size+511;
+    var site = Terminator();
+    var outpost = new Colony(rules,empty: true,site: site).Export();
+    var tiles = new[] { new[] {anchor,solar.Id}, [anchor+1,solar.Id], [anchor+2,habitat.Id], [anchor+Colony.Size,facility.Id] };
+    colony = Colony.Restore(rules,outpost with { Population = 2,Tiles = tiles },site);
+    colony.Step();
+    Equal(3,colony.Export().Population);
+    colony.Toggle(anchor+Colony.Size);
+    colony.Step();
+    Equal(3,colony.Export().Population);
 }
 
 void OceanTransitions()

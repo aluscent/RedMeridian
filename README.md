@@ -100,7 +100,18 @@ threshold.
 Solar output follows local sunlight. Temperature limits apply to the entire
 footprint. Frozen oceans and dry seabeds can be built on. Melting or refilling
 can destroy buildings, including buildings on shore. After a flood, liquid
-shore can be built on again. Climate profiles and engineering duration live
+shore can be built on again. New Terminator colonies use a 30 × 360 meridian
+with five-tile cold and hot bands. Adjacent tiles differ by at most two
+elevation levels, and a new building footprint can span three levels
+(for example, elevations 7 through 9). Terrain shading shows relief,
+sunlight, temperature, and water depth on the normal map.
+
+Mars gains 1% population every six in-game hours while it has housing and
+supply reserves. Fractions carry over to later arrivals. A powered and
+staffed Human production facility adds one colonist per in-game hour on any
+base with spare housing and supplies for the additional colonist.
+
+Climate profiles and engineering duration live
 in `Config/world.json`, and building temperature limits live in
 `Config/buildings.json`. Planetary engineering requires at least 200 sols
 of effective work per metric from its starting value.

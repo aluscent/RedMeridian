@@ -21,7 +21,7 @@ sealed record ColonySite(string Id, string Name, string Kind, int Width, int See
     [
         Mars,
         new("venus", "Venus Survey Outpost", "planet", 112, 92431, 100, 2, 120),
-        new("terminator", "The Terminator", "planet", 108, 57331, 10, 8, 110),
+        new("terminator", "The Terminator", "planet", 30, 57331, 10, 8, 360),
         new("mars-orbit-1", "Mars Orbit · Slot 1", "orbit", 5, 1, 0, 1, 150),
         new("mars-orbit-2", "Mars Orbit · Slot 2", "orbit", 5, 2, 0, 1, 150),
         new("ceres", "Ceres Mining Outpost", "asteroid", 32, 3107, 180, 3),

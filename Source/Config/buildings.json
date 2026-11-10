@@ -891,5 +891,19 @@
     },
     "minimumTemperature": -35,
     "maximumTemperature": 45
+  },
+  {
+    "id": 33,
+    "name": "Human production facility",
+    "category": "Life support",
+    "art": "research",
+    "image": "assets/research-lab.png",
+    "cost": {
+      "alloy": 60
+    },
+    "power": 3,
+    "crew": 1,
+    "colonistsPerHour": 1,
+    "description": "Adds one colonist per hour while powered and staffed, with housing and life support available."
   }
 ]

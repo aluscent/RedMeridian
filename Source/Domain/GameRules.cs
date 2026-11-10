@@ -12,7 +12,9 @@ sealed record Metric(string Id, string Name, string Unit, int Initial, int Targe
 sealed record StormCycle(int Period, int Start, int End);
 sealed record PlanetSize(int Width, int Height)
 {
-    public bool Valid => Width >= 32 && Height >= 32 && (long)Width * Height is >= 8_000 and <= 14_000;
+    public bool ValidFor(string site) => Height is >= 32 and <= Colony.Size && Width <= Colony.Size &&
+        (Width >= 32 || site == "terminator" && Width is >= 10 and <= 30) &&
+        (long)Width * Height is >= 8_000 and <= 14_000;
 }
 sealed record WorldRules(int StarterPopulation, int CrewPerColonist, int ColonistsPerRation,
     int ArrivalInterval, int ArrivalReserves, string[] LifeSupport, string ResearchMaterial,
@@ -40,6 +42,7 @@ sealed record Building
     public int Power { get; init; }
     public int Crew { get; init; }
     public int Beds { get; init; }
+    public int ColonistsPerHour { get; init; }
     public int Storage { get; init; }
     public int ChargeRate { get; init; }
     public int DischargeRate { get; init; }
@@ -83,8 +86,10 @@ sealed class GameRules
             ColonySite.All.Any(site => site.Id == item.Key && site.PlanetaryEngineering && site.Kind != "mars")),
             "Invalid map climate profile.");
         Require(World.PlanetSizes is null || World.PlanetSizes.All(entry =>
-            entry.Value is { Valid: true } && ColonySite.All.Any(site => site.Id == entry.Key && site.PlanetaryEngineering)),
-            "Planet sizes must cover 8,000–14,000 tiles, with both dimensions at least 32.");
+            entry.Value is not null && entry.Value.ValidFor(entry.Key) &&
+            (entry.Key != "terminator" || entry.Value.Width <= 30) &&
+            ColonySite.All.Any(site => site.Id == entry.Key && site.PlanetaryEngineering)),
+            "Planet sizes must cover 8,000–14,000 tiles, with a narrow width allowed for the Terminator.");
 
         var materialIds = Unique(Materials.Select(m => m.Id), "material");
         var shipIds = Unique(ShipTypes.Select(ship => ship.Id), "spacecraft");
@@ -152,7 +157,7 @@ sealed class GameRules
                 Amounts(b.Cost,materialIds) && Amounts(b.Inputs,materialIds) && Amounts(b.Outputs,materialIds) &&
                 Amounts(b.Effects,metricIds) && (b.Deposit is null || depositIds.Contains(b.Deposit)) &&
                 (b.Research is null || technologies.ContainsKey(b.Research)) &&
-                new[] { b.Power,b.Generation,b.StormGeneration ?? 0,b.Crew,b.Beds,b.Storage,b.ChargeRate,b.DischargeRate }
+                new[] { b.Power,b.Generation,b.StormGeneration ?? 0,b.Crew,b.Beds,b.ColonistsPerHour,b.Storage,b.ChargeRate,b.DischargeRate }
                     .All(value => value is >= 0 and <= 1000), $"Invalid building definition for ID {b.Id} ({b.Name}).");
             Require(Surface.Fits(0,b.Footprint) && b.Upgrades.Length <= 2 &&
                 (b.Upgrades.Length == 0 || b.Deposit is not null && b.Outputs.Count > 0) &&
@@ -167,9 +172,9 @@ sealed class GameRules
             Require(b.SpaceRole is null or "relay" or "assembly" or "terminal" or "dock",
                 $"Unknown space role for {b.Name}.");
             Require((b.StormGeneration is null || b.Generation > 0) &&
-                (b.Generation == 0 || (b.Power == 0 && b.Storage == 0 && b.Outputs.Count == 0 && b.Effects.Count == 0 && b.Beds == 0)) &&
+                (b.Generation == 0 || (b.Power == 0 && b.Storage == 0 && b.Outputs.Count == 0 && b.Effects.Count == 0 && b.Beds == 0 && b.ColonistsPerHour == 0)) &&
                 (b.Storage == 0 ? b.ChargeRate == 0 && b.DischargeRate == 0 :
-                    b.ChargeRate > 0 && b.DischargeRate > 0 && b.Power == 0 && b.Crew == 0 && b.Beds == 0 &&
+                    b.ChargeRate > 0 && b.DischargeRate > 0 && b.Power == 0 && b.Crew == 0 && b.Beds == 0 && b.ColonistsPerHour == 0 &&
                     b.Inputs.Count == 0 && b.Outputs.Count == 0 && b.Effects.Count == 0),
                 $"Incompatible power roles for {b.Name}.");
         }

@@ -7,7 +7,7 @@ record SaveData(int Version, int[][]? Tiles, long[]? Stock, int Population, long
     MapSettings? Map = null, SavedStructure[]? Structures = null,
     Dictionary<int,WeatherForecast>? WeatherForecasts = null, SpaceSave? Space = null,
     string[]? ActivatedResearch = null, bool LongOrbit = false, AssemblyOrder[]? Assembly = null,
-    PlanetSize? PlanetBounds = null, ClimateSettings? Climate = null, Dictionary<string,int>? EngineeringCredit = null);
+    PlanetSize? PlanetBounds = null, ClimateSettings? Climate = null, Dictionary<string,int>? EngineeringCredit = null, int MigrationCredit = 0);
 
 
 sealed partial class Colony
@@ -39,7 +39,7 @@ sealed partial class Colony
     readonly HashSet<int> climateBlocked = new();
     readonly PowerGrid power = new();
     readonly Queue<double> stepTimes = new();
-    int population, housing, crewUsed;
+    int population, housing, crewUsed, migrationCredit;
     long tick, generated, used, demand;
     bool shortage;
 
@@ -144,6 +144,7 @@ sealed partial class Colony
             generated += (long)running * output;
         }
 
+        int colonistsProduced = 0;
         foreach (var group in consumers)
         {
             var consumer = group.Building;
@@ -153,6 +154,7 @@ sealed partial class Colony
             Consume(group,running,ref crew);
             used += (long)running * consumer.Power;
             housing += running * consumer.Beds;
+            colonistsProduced += running * consumer.ColonistsPerHour;
             foreach (var (id,amount) in consumer.Outputs)
                 stock[id] = Math.Min(StockLimit,stock[id] + (long)amount * running);
             if (running > 0 && Site.PlanetaryEngineering)
@@ -165,7 +167,7 @@ sealed partial class Colony
         AdvanceEngineering();
         power.Settle(generated,used);
         crewUsed = population * rules.World.CrewPerColonist - crew;
-        UpdatePopulation();
+        UpdatePopulation(colonistsProduced);
         RecordWeatherForecasts();
         foreach (var material in rules.Materials) delta[material.Id] += stock[material.Id];
 
@@ -204,21 +206,38 @@ sealed partial class Colony
         foreach (var (id,amount) in b.Inputs) stock[id] -= (long)amount * running;
     }
 
-    void UpdatePopulation()
+    void UpdatePopulation(int colonistsProduced)
     {
         var world = rules.World;
         int ration = (population + world.ColonistsPerRation - 1) / world.ColonistsPerRation;
         shortage = housing < population;
         bool surplus = true;
+        long suppliedPopulation = MaxPopulation;
         foreach (var id in world.LifeSupport)
         {
             shortage |= stock[id] < ration;
             stock[id] = Math.Max(0,stock[id] - ration);
             surplus &= stock[id] >= (long)ration * world.ArrivalReserves;
+            suppliedPopulation = Math.Min(suppliedPopulation,stock[id] * world.ColonistsPerRation);
         }
-        if (tick % world.ArrivalInterval != 0) return;
-        if (shortage && population > 1) population--;
-        else if (Site.Kind == "mars" && !shortage && surplus && population < Math.Min(housing,MaxPopulation)) population++;
+        bool arrival = tick % world.ArrivalInterval == 0;
+        if (shortage)
+        {
+            if (arrival && population > 1) population--;
+            return;
+        }
+
+        int availableBeds = Math.Max(0,Math.Min(housing,MaxPopulation)-population);
+        if (arrival && Site.Kind == "mars" && surplus && availableBeds > 0)
+        {
+            int credit = population + migrationCredit;
+            int arrivals = Math.Min(availableBeds,credit/100);
+            migrationCredit = credit%100;
+            population += arrivals;
+            availableBeds -= arrivals;
+        }
+        int suppliedBeds = (int)Math.Max(0,suppliedPopulation-population);
+        population += Math.Min(colonistsProduced,Math.Min(availableBeds,suppliedBeds));
     }
 
     void RefreshCapacity()
