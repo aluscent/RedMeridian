@@ -15,6 +15,10 @@ var rules = new GameRules(Path.Combine(AppContext.BaseDirectory, "Config"));
     ("Recurring routes respect reserves and avoid counting inbound cargo twice", RecurringCargo),
     ("Assembly pauses offline and preserves typed orders through saves", TimedAssembly),
     ("Planetary engineering requires long-term investment and runs only on planets", PlanetaryEngineering),
+    ("Climate is seeded and humidity narrows both sides of the temperature band", ClimateMath),
+    ("Ocean transitions remove whole footprints once and preserve usable shore", OceanTransitions),
+    ("Climate controls solar output and suspends and restores extractors", ClimateOperation),
+    ("New maps enforce deposit density bounds and legacy saves retain generation settings", MapDensity),
     ("Research requires explicit activation and preserves legacy unlocks", ResearchActivation),
     ("Tester commands are gated by server configuration", TesterCommands),
     ("Current saves preserve map edits, upgrades, and shutdowns", CurrentSaveRoundTrip),
@@ -127,6 +131,7 @@ void StarterProduction()
 void CurrentSaveRoundTrip()
 {
     var colony = new Colony(rules, map: new(-42, 0, new() { [0] = "iron", [1] = null }));
+    colony.Receive(new() { ["alloy"] = 100 });
     var mine = rules.Buildings.Single(b => b.Deposit == "iron");
     colony.Build(0, mine.Id);
     colony.Upgrade(0);
@@ -149,6 +154,7 @@ void WeatherObservatory()
     var observatory = rules.Buildings.Single(b => b.ForecastsWeather);
     var solar = rules.Buildings.Single(b => b.Art == "solar");
     var colony = new Colony(rules, empty: true);
+    colony.Receive(new() { ["alloy"] = 100 });
     colony.Build(0, solar.Id);
     colony.Build(1, observatory.Id);
     Equal<Dictionary<int,WeatherForecast>?>(null, colony.Export().WeatherForecasts);
@@ -227,6 +233,7 @@ void SpaceLogistics()
     int iron = rules.Buildings.Single(b => b.Deposit == "iron").Id;
     Reject(() => orbit.Build(510 * Colony.Size + 510, iron));
     int lab = rules.Buildings.Single(b => b.Art == "lab" && b.Outputs.ContainsKey("research")).Id;
+    orbit.Receive(new() { ["alloy"] = 100 });
     orbit.Build(510 * Colony.Size + 510, lab);
     program.Step();
     Equal(milestone.Points+3, orbit.Stock("research"));
@@ -290,19 +297,119 @@ void PlanetaryEngineering()
     var initial = new Colony(rules, empty: true).Export();
     int center = 511 * Colony.Size + 511;
     var heat = rules.Buildings.Single(item => item.Effects.ContainsKey("temperature"));
-    initial.Materials!["ore"] = 10_000;
-    initial.Materials["propellant"] = 10_000;
+    initial.Materials!["ore"] = 50_000;
+    initial.Materials["propellant"] = 50_000;
     initial.Materials["food"] = 10_000;
     initial.Materials["water"] = 10_000;
     initial = initial with { Tiles = [[center, heat.Id], [center+1, 1], [center+2, 1], [center+3, 6]] };
     var mars = Colony.Restore(rules, initial);
     var europa = Colony.Restore(rules, initial, ColonySite.All.Single(site => site.Id == "europa"));
     var temperature = rules.World.Metrics.Single(metric => metric.Id == "temperature");
+    int duration = rules.World.EngineeringSols * 24;
     for (int i = 0; i < 300; i++) { mars.Step(); europa.Step(); }
-    Equal(temperature.Initial + 300, mars.Export().Metrics!["temperature"]);
+    Equal(temperature.Initial + (temperature.Target-temperature.Initial)*300/duration, mars.Export().Metrics!["temperature"]);
     Equal(temperature.Initial, europa.Export().Metrics!["temperature"]);
-    for (int i = 300; i < 750; i++) mars.Step();
+    mars = Colony.Restore(rules, mars.Export());
+    for (int i = 300; i < duration-1; i++) mars.Step();
+    Equal(temperature.Target-1, mars.Export().Metrics!["temperature"]);
+    mars.Step();
     Equal(temperature.Target, mars.Export().Metrics!["temperature"]);
+}
+
+ColonySite Terminator() => rules.NewSite(ColonySite.All.Single(site => site.Id == "terminator"));
+ClimateProfile TerminatorProfile() => rules.World.Climates!["terminator"];
+IEnumerable<int> TerminatorTiles() =>
+    from y in Enumerable.Range(Terminator().Top,Terminator().Height)
+    from x in Enumerable.Range(Terminator().Left,Terminator().Width)
+    select y*Colony.Size+x;
+
+void ClimateMath()
+{
+    var site = Terminator();
+    var profile = TerminatorProfile();
+    var weather = new TileClimate(site,site.Seed,profile,profile.Initial);
+    var same = new TileClimate(site,site.Seed,profile,profile.Initial);
+    int tile = TerminatorTiles().First();
+    Equal(weather.Elevation(tile), same.Elevation(tile));
+    Equal(weather.Sunlight(tile), same.Sunlight(tile));
+    Equal(weather.Temperature(tile), same.Temperature(tile));
+    Equal(weather.Temperature(tile)+100, weather.Temperature(tile,new(10,0)));
+    Equal(150, profile.AdjustOffset(200,20));
+    Equal(-150, profile.AdjustOffset(-200,20));
+    Equal(0, profile.AdjustOffset(0,20));
+    Equal(true, profile.EffectiveBase(new(0,100)) > profile.EffectiveBase(new(0,20)));
+    Equal(true, Math.Abs(profile.AdjustOffset(-200,100)) < 150);
+}
+
+void OceanTransitions()
+{
+    var site = Terminator();
+    var profile = TerminatorProfile();
+    var weather = new TileClimate(site,site.Seed,profile,new(-200,0));
+    var shape = new Footprint(2,2);
+    int ocean = TerminatorTiles().First(index => site.Contains(index,shape) &&
+        Surface.Tiles(index,shape).All(tile => weather.Elevation(tile) is >= 1 and <= 6 &&
+            weather.Water(weather.Elevation(tile),weather.Temperature(tile,new(-15,100))) == WaterState.Liquid));
+    int shore = TerminatorTiles().First(index => weather.Elevation(index) == 6);
+    int unusable = TerminatorTiles().First(index => weather.Elevation(index) is 0 or 15);
+    var solar = rules.Buildings.Single(building => building.Art == "solar");
+    var empty = new Colony(rules, empty: true, site: site, map: new(site.Seed,10,DensityPercent: true)).Export();
+    var liquid = new ClimateSettings(-15,100);
+    foreach (int degrees in new[] {-200,200})
+    {
+        var save = empty with { Climate = new(degrees,0), Tiles = [[ocean,solar.Id]],
+            Structures = [new(ocean,2,2)] };
+        var colony = Colony.Restore(rules, save, site);
+        Equal(1, colony.ChangeClimate(liquid));
+        Equal(0, colony.ChangeClimate(liquid));
+        Equal(0, colony.Export().Tiles!.Length);
+        colony.Build(shore, solar.Id);
+        Reject(() => colony.Build(unusable, solar.Id));
+        var restored = Colony.Restore(rules, colony.Export(), site);
+        Equal(liquid, restored.Export().Climate);
+        Equal((byte)solar.Id, restored.Grid[shore]);
+    }
+}
+
+void ClimateOperation()
+{
+    var site = Terminator();
+    var profile = TerminatorProfile();
+    var weather = new TileClimate(site,site.Seed,profile,profile.Initial);
+    var tiles = TerminatorTiles().Where(index => weather.Elevation(index) is >= 7 and <= 14).ToArray();
+    int dark = tiles.First(index => weather.Sunlight(index)==0);
+    int bright = tiles.First(index => weather.Sunlight(index)==100);
+    int ice = tiles.First(index => weather.Temperature(index) is >= -500 and <= -250);
+    var solar = rules.Buildings.Single(building => building.Art == "solar");
+    var extractor = rules.Buildings.Single(building => building.Deposit == "ice");
+    var empty = new Colony(rules, empty: true, site: site, map: new(site.Seed,10,
+        new() { [ice] = "ice" },DensityPercent: true)).Export();
+    var colony = Colony.Restore(rules,empty with { Tiles = [[dark,solar.Id],[bright,solar.Id],[ice,extractor.Id]] },site);
+    colony.Step();
+    using var initial = Status(colony);
+    Equal((long)solar.Generation, initial.RootElement.GetProperty("supply").GetInt64());
+    long water = colony.Stock("water");
+    colony.ChangeClimate(new(0,60));
+    colony.Step();
+    Equal(true, colony.Stock("water") < water);
+    colony.ChangeClimate(profile.Initial);
+    water = colony.Stock("water");
+    colony.Step();
+    Equal(true, colony.Stock("water") > water);
+}
+
+void MapDensity()
+{
+    var session = new ColonySession(rules, new ConfigurationBuilder().Build());
+    foreach (int abundance in new[] {2,3,15,16})
+    {
+        var result = (IStatusCodeHttpResult)session.Apply(new("new",Map: new(42,abundance)));
+        Equal<int?>(abundance is >= 3 and <= 15 ? 200 : 400,result.StatusCode);
+    }
+    var legacy = new Colony(rules,map: new(42,175),empty: true);
+    var restored = Colony.Restore(rules,legacy.Export());
+    Equal(175,restored.MapSettings.Abundance);
+    Equal(false,restored.MapSettings.DensityPercent);
 }
 
 void LegacySave()

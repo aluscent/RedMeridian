@@ -6,9 +6,9 @@
 <title>Red Meridian — Mars Colony</title>
 <link rel="stylesheet" href="styles.css?v=map-9">
 <script defer src="sprites.js?v=map-5"></script>
-<script defer src="editor.js?v=map-10"></script>
+<script defer src="editor.js?v=map-11"></script>
 <script defer src="logistics.js?v=map-10"></script>
-<script defer src="game.js?v=map-10"></script>
+<script defer src="game.js?v=map-11"></script>
 </head>
 <body>
 <header>
@@ -26,7 +26,7 @@
       <h3>Generate map</h3>
       <label>World seed <input id="seed" type="number" min="-2147483648" max="2147483647" step="1" value="0" required></label>
       <button id="newSeed">Random seed</button>
-      <label>Resource abundance <output id="abundanceValue"></output><input id="abundance" type="range" min="0" max="200" value="100"></label>
+      <label>Resource abundance <output id="abundanceValue"></output><input id="abundance" type="range" min="3" max="15" value="8"></label>
       <small>Changes deposit density. The marked landing outpost always has its starter deposits.</small>
       <button id="editorMode" aria-pressed="false">Map editor</button>
       <div id="editorTools" hidden>
@@ -49,6 +49,16 @@
         <div class="bar"><div><span class="label" id="world">Landing sector</span> <span id="clock"></span></div><div class="controls"><button id="home">Center</button><button id="out" aria-label="Zoom out">−</button><button id="in" aria-label="Zoom in">+</button></div></div>
         <div class="bar"><button id="openLogistics" aria-controls="logistics" aria-expanded="false">Space travel</button></div>
         <section id="stats" aria-label="Colony resources"></section>
+        <details id="climateControls" class="research" hidden>
+          <summary>Map climate</summary>
+          <form id="climateForm" class="controls">
+            <label>Base °C <input id="baseTemperature" type="number" min="-200" max="200" required></label>
+            <label>Humidity % <input id="humidity" type="number" min="0" max="100" required></label>
+            <button type="submit">Apply climate</button>
+            <label>Overlay <select id="climateOverlay"><option value="terrain">Terrain</option><option value="sunlight">Sunlight</option><option value="temperature">Temperature</option><option value="elevation">Elevation</option></select></label>
+          </form>
+          <small id="climateBase"></small>
+        </details>
         <div class="viewport">
           <canvas id="map" tabindex="0" aria-label="Isometric colony map. Arrow keys move the cursor. Enter inspects or builds."></canvas>
           <details class="legend"><summary>Deposits</summary><div id="deposits"></div></details>
@@ -65,6 +75,7 @@
           </section>
           <div id="weather" hidden>Dust storm · reduced solar output</div>
         </div>
+        <output id="climateReadout" class="bar" hidden></output>
         <div class="bar map-bottom"><span id="inspect">Select a tile to inspect it.</span><span id="notice" role="status"></span></div>
       </section>
       <section class="planet" id="engineering" aria-label="Terraforming progress"><div class="bar"><span class="label">Planetary engineering</span><span id="mission">Research climate infrastructure</span></div><div id="metrics"></div></section>

@@ -3,7 +3,12 @@ namespace RedMeridian.Domain;
 sealed partial class Colony
 {
     int Level(int index) => levels.GetValueOrDefault(index,1);
-    ProductionGroup Group(int index) => groups[Grid[index] - 1][Level(index) - 1];
+    ProductionGroup Group(int index)
+    {
+        var group = groups[Grid[index] - 1][Level(index) - 1];
+        return climate is not null && solarGroups.TryGetValue(group,out var variants)
+            ? variants[climate.Sunlight(index)] : group;
+    }
 
     void Place(int index,int type,Footprint shape,int level = 1,bool off = false)
     {
@@ -11,8 +16,9 @@ sealed partial class Colony
         counts[type - 1]++;
         surface.Occupy(index,shape);
         if (level > 1) levels.Add(index,level);
+        if (!TemperatureAllows(index,rules.Buildings[type-1],shape)) climateBlocked.Add(index);
         if (off) disabled.Add(index);
-        else Group(index).Add(index);
+        else if (!climateBlocked.Contains(index)) Group(index).Add(index);
     }
 
     public (string Message, TileEdit Edit) Build(int index,int type)
@@ -21,7 +27,7 @@ sealed partial class Colony
             throw new InvalidOperationException("Choose a valid tile and building.");
         var b = rules.Buildings[type - 1];
         if (!Site.Allows(b)) throw new InvalidOperationException("This facility cannot operate in this environment.");
-        if (!Site.Contains(index,b.Footprint) || !surface.Open(index,b.Footprint))
+        if (!Site.Contains(index,b.Footprint) || !surface.Open(index,b.Footprint) || !TerrainAllows(index,b.Footprint))
             throw new InvalidOperationException("The building footprint is blocked or outside the map.");
         if (!MatchesDeposit(index,b))
             throw new InvalidOperationException($"The anchor requires {rules.World.Deposits.Single(d => d.Id == b.Deposit).Name}.");
@@ -68,7 +74,8 @@ sealed partial class Colony
                 if (owner >= 0 && claimed.Add(owner)) edits.Add(new(owner,0));
             }
             else if (x + b.Footprint.Width - 1 <= x1 && y + b.Footprint.Height - 1 <= y1 &&
-                Site.Contains(index,b.Footprint) && surface.Open(index,b.Footprint) && MatchesDeposit(index,b) &&
+                Site.Contains(index,b.Footprint) && surface.Open(index,b.Footprint) && TerrainAllows(index,b.Footprint) &&
+                MatchesDeposit(index,b) &&
                 Surface.Tiles(index,b.Footprint).All(tile => !claimed.Contains(tile)))
             {
                 edits.Add(Edit(index,type,b.Footprint));
@@ -109,9 +116,10 @@ sealed partial class Colony
         return new
         {
             index, type, level, disabled = off, running, workers = running ? recipe.Crew : 0,
-            crew = recipe.Crew, powerOutput = running ? OutputPower(recipe) : 0,
-            ratedPowerOutput = OutputPower(recipe), powerUse = running ? recipe.Power : 0,
+            crew = recipe.Crew, powerOutput = running ? OutputPower(group) : 0,
+            ratedPowerOutput = OutputPower(group), powerUse = running ? recipe.Power : 0,
             ratedPowerUse = recipe.Power, outputs = recipe.Outputs,
+            temperatureBlocked = climateBlocked.Contains(index),
             width = (int)Widths[index], height = (int)Heights[index],
             upgrade = level <= recipe.Upgrades.Length ? recipe.Upgrades[level - 1] : null,
             weatherForecast = weatherForecasts.GetValueOrDefault(index),
@@ -124,10 +132,13 @@ sealed partial class Colony
     {
         int index = RequireStructure(tile);
         bool enabled = disabled.Remove(index);
-        if (enabled) Group(index).Add(index);
+        if (enabled)
+        {
+            if (!climateBlocked.Contains(index)) Group(index).Add(index);
+        }
         else
         {
-            Group(index).Remove(index);
+            if (!climateBlocked.Contains(index)) Group(index).Remove(index);
             disabled.Add(index);
         }
         RefreshCapacity();
@@ -143,7 +154,7 @@ sealed partial class Colony
         var upgrade = b.Upgrades[level - 1];
         CheckCost(upgrade.Cost,1,$"{b.Name} level {level + 1}");
         Pay(upgrade.Cost,1);
-        bool enabled = !disabled.Contains(index);
+        bool enabled = !disabled.Contains(index) && !climateBlocked.Contains(index);
         if (enabled) Group(index).Remove(index);
         levels[index] = level + 1;
         if (enabled) Group(index).Add(index);
@@ -180,15 +191,19 @@ sealed partial class Colony
         foreach (var (id,amount) in cost) stock[id] -= (long)amount * count;
     }
 
-    void Demolish(int index,Dictionary<string,long> salvage)
+    void Demolish(int index,Dictionary<string,long>? salvage)
     {
         int i = Grid[index] - 1;
-        if (!disabled.Remove(index)) Group(index).Remove(index);
+        bool wasDisabled = disabled.Remove(index);
+        bool wasBlocked = climateBlocked.Remove(index);
+        if (!wasDisabled && !wasBlocked) Group(index).Remove(index);
         levels.Remove(index);
         weatherForecasts.Remove(index);
+        assemblyOrders.Remove(index);
         Grid[index] = 0;
         counts[i]--;
         surface.Clear(index);
+        if (salvage is null) return;
         foreach (var (id,amount) in rules.Buildings[i].Cost)
         {
             long recovered = Math.Min(StockLimit - stock[id],amount / 2);

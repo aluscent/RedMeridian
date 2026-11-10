@@ -7,7 +7,7 @@ record SaveData(int Version, int[][]? Tiles, long[]? Stock, int Population, long
     MapSettings? Map = null, SavedStructure[]? Structures = null,
     Dictionary<int,WeatherForecast>? WeatherForecasts = null, SpaceSave? Space = null,
     string[]? ActivatedResearch = null, bool LongOrbit = false, AssemblyOrder[]? Assembly = null,
-    PlanetSize? PlanetBounds = null);
+    PlanetSize? PlanetBounds = null, ClimateSettings? Climate = null, Dictionary<string,int>? EngineeringCredit = null);
 
 
 sealed partial class Colony
@@ -24,6 +24,7 @@ sealed partial class Colony
     readonly HashSet<int> disabled = new();
     HashSet<string> activatedResearch = new();
     readonly ProductionGroup[][] groups;
+    readonly Dictionary<ProductionGroup,ProductionGroup[]> solarGroups = new();
     readonly ProductionGroup[] producers, consumers, batteries;
     readonly ProductionGroup[] observatories;
     public MapSettings MapSettings => surface.Settings;
@@ -32,6 +33,10 @@ sealed partial class Colony
     public byte[] Heights => surface.Heights;
     readonly Dictionary<string,long> stock, delta;
     readonly Dictionary<string,int> planet;
+    readonly Dictionary<string,int> engineeringCredit = new();
+    readonly Dictionary<string,long> engineeringWork = new();
+    readonly TileClimate? climate;
+    readonly HashSet<int> climateBlocked = new();
     readonly PowerGrid power = new();
     readonly Queue<double> stepTimes = new();
     int population, housing, crewUsed;
@@ -41,13 +46,21 @@ sealed partial class Colony
     bool Storm => Site.Kind == "mars" && tick % rules.World.Storm.Period >= rules.World.Storm.Start &&
         tick % rules.World.Storm.Period < rules.World.Storm.End;
 
-    public Colony(GameRules rules, bool stress = false, MapSettings? map = null, bool empty = false, ColonySite? site = null)
+    public Colony(GameRules rules, bool stress = false, MapSettings? map = null, bool empty = false,
+        ColonySite? site = null, ClimateSettings? climateSettings = null)
     {
         this.rules = rules;
         Site = site ?? ColonySite.Mars;
         allowedBuildings = rules.Buildings.Where(building => Site.Allows(building)).Select(building => building.Id).ToArray();
         counts = new int[rules.Buildings.Length];
         surface = new Surface(rules,map);
+        if (rules.World.Climates?.GetValueOrDefault(Site.Id) is { } profile)
+        {
+            var settings = climateSettings ?? profile.Initial;
+            if (!settings.Valid) throw new InvalidOperationException("Invalid map temperature or humidity.");
+            climate = new(Site,MapSettings.Seed,profile,settings);
+        }
+        else if (climateSettings is not null) throw new InvalidOperationException("This destination has no climate profile.");
         groups = rules.Buildings.Select(b => new[] { new ProductionGroup(b) }
             .Concat(b.Upgrades.Select(u => new ProductionGroup(b with
             {
@@ -55,7 +68,13 @@ sealed partial class Colony
                 Crew = b.Crew + u.ExtraCrew,
                 Outputs = b.Outputs.ToDictionary(pair => pair.Key,pair => pair.Value * u.Multiplier)
             }))).ToArray()).ToArray();
-        var allGroups = groups.SelectMany(group => group).ToArray();
+        var allGroups = groups.SelectMany(group => group).SelectMany(group =>
+        {
+            if (climate is null || group.Building.Art != "solar") return new[] { group };
+            var variants = Enumerable.Range(0,101).Select(sun => new ProductionGroup(group.Building,sun)).ToArray();
+            solarGroups.Add(group,variants);
+            return variants;
+        }).ToArray();
         producers = allGroups.Where(g => g.Building.Generation > 0).OrderBy(g => g.Building.Inputs.Count > 0)
             .ThenBy(g => g.Building.Priority).ToArray();
         consumers = allGroups.Where(g => g.Building.Generation == 0 && g.Building.Storage == 0)
@@ -85,18 +104,19 @@ sealed partial class Colony
     void RefreshInitialOutput()
     {
         generated = producers.Where(g => g.Building.Inputs.Count == 0 && g.Building.Crew == 0)
-            .Sum(g => (long)g.Count * OutputPower(g.Building));
+            .Sum(g => (long)g.Count * OutputPower(g));
     }
 
-    int OutputPower(Building b)
+    int OutputPower(ProductionGroup group)
     {
+        var b = group.Building;
         if (Storm) return b.StormGeneration ?? b.Generation;
         if (b.Art != "solar") return b.Generation;
         return Site.Kind switch
         {
             "orbit" => Site.Distance >= 5 ? b.Generation / 2 : b.Generation * 3 / 2,
             "moon" => b.Generation / 2,
-            _ => b.Generation
+            _ => (b.Generation*group.Sunlight+50)/100
         };
     }
 
@@ -109,10 +129,11 @@ sealed partial class Colony
         generated = 0;
         used = 0;
         housing = 0;
+        engineeringWork.Clear();
         foreach (var group in producers)
         {
             var producer = group.Building;
-            int output = OutputPower(producer);
+            int output = OutputPower(group);
             int running = output == 0 ? 0 : Available(group, crew);
             if (producer.Inputs.Count > 0 && output > 0)
             {
@@ -136,12 +157,12 @@ sealed partial class Colony
                 stock[id] = Math.Min(StockLimit,stock[id] + (long)amount * running);
             if (running > 0 && Site.PlanetaryEngineering)
             {
-                foreach (var metric in rules.World.Metrics)
-                    if (consumer.Effects.TryGetValue(metric.Id,out int increase))
-                        planet[metric.Id] = (int)Math.Min(metric.Target, planet[metric.Id] + (long)increase * running);
+                foreach (var (id,increase) in consumer.Effects)
+                    engineeringWork[id] = engineeringWork.GetValueOrDefault(id) + (long)increase*running;
             }
         }
         foreach (var battery in batteries) battery.Active = battery.Count;
+        AdvanceEngineering();
         power.Settle(generated,used);
         crewUsed = population * rules.World.CrewPerColonist - crew;
         UpdatePopulation();
@@ -150,6 +171,19 @@ sealed partial class Colony
 
         stepTimes.Enqueue(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
         if (stepTimes.Count > 120) stepTimes.Dequeue();
+    }
+
+    void AdvanceEngineering()
+    {
+        int duration = rules.World.EngineeringSols * 24;
+        foreach (var metric in rules.World.Metrics)
+        {
+            if (planet[metric.Id] >= metric.Target || !engineeringWork.TryGetValue(metric.Id,out long work)) continue;
+            long span = (long)metric.Target-metric.Initial;
+            long credit = engineeringCredit.GetValueOrDefault(metric.Id)+Math.Min(span,work*duration);
+            planet[metric.Id] = (int)Math.Min(metric.Target,planet[metric.Id]+credit/duration);
+            engineeringCredit[metric.Id] = (int)(credit%duration);
+        }
     }
 
     int Available(ProductionGroup group,int crew)
@@ -224,7 +258,10 @@ sealed partial class Colony
         shortage, storm = Storm, planet = new Dictionary<string,int>(planet),
         complete = Site.PlanetaryEngineering && rules.World.Metrics.All(m => planet[m.Id] >= m.Target),
         unlocked = activatedResearch.ToArray(),
-        counts = counts.ToArray(), active = groups.Select(group => group.Sum(g => g.Active)).ToArray(), total = counts.Sum(),
+        climate = climate is null ? null : new { climate.Settings.BaseTemperature, climate.Settings.Humidity, effectiveBase = climate.EffectiveBase },
+        counts = counts.ToArray(),
+        active = groups.Select(group => group.Sum(g => solarGroups.TryGetValue(g,out var variants) ? variants.Sum(v => v.Active) : g.Active)).ToArray(),
+        total = counts.Sum(),
         tickMs = stepTimes.Count == 0 ? 0 : stepTimes.Order().ElementAt((int)Math.Ceiling(stepTimes.Count * .95) - 1)
     };
 }

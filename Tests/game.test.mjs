@@ -37,7 +37,7 @@ test("both editions include the configured PNGs and correctly sized terrain asse
 
 test("live game serves the map, rejects stale edits, and reloads an isolated save", { timeout: 30_000 }, async t => {
   const saveDir = await mkdtemp(join(tmpdir(), "red-meridian-tests-"));
-  const server = spawn("dotnet", ["bin/Release/net8.0/RedMeridian.dll", "--urls", "http://127.0.0.1:0"], {
+  const server = spawn("dotnet", ["bin/Release/net8.0/RedMeridian.dll", "--urls", "http://127.0.0.1:0", "--developer", "true"], {
     cwd: fileURLToPath(source),
     env: { ...process.env, RED_MERIDIAN_SAVE: join(saveDir, "colony.json") },
     stdio: ["ignore", "pipe", "pipe"]
@@ -99,9 +99,12 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   assert.equal(initial.started, false);
   const site = catalog.landingSite;
   const first = site.top * 1024 + site.left;
-  const map = { seed: -123456, abundance: 175, paint: { [first]: "iron", [first + 1]: null } };
+  for (const abundance of [2, 16]) await command("new", { map: { abundance } }, 400);
+  for (const abundance of [3, 15]) await command("new", { map: { abundance } });
+  const map = { seed: -123456, abundance: 15, densityPercent: true, paint: { [first]: "iron", [first + 1]: null } };
   await command("new", { map });
   const { state } = await command("pause");
+  await command("tester-grant", { revision: state.revision, material: "alloy", amount: 100 });
   assert.deepEqual(await (await get("/api/surface")).json(), map);
   await command("build", { index: first, type: mine.id, revision: state.revision - 1 }, 400);
 
@@ -109,7 +112,8 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   const editor = await (await get("/editor.js")).text();
   const makeGeology = runInNewContext(editor + "\nmakeGeology");
   const geology = makeGeology(catalog, catalog.world.deposits);
-  const naturalOre = Array.from({ length: site.width - 2 }, (_, i) => first + i + 2)
+  const naturalOre = Array.from({ length: site.width * 4 - 2 }, (_, i) =>
+    first + Math.floor((i+2)/site.width)*1024 + (i+2)%site.width)
     .find(index => geology.at(index, map)?.id === mine.deposit);
   assert.ok(Number.isInteger(naturalOre), "fixture seed should expose natural iron");
   await command("build", { index: first + 1, type: mine.id, revision: state.revision }, 400);
@@ -119,7 +123,7 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   const response = await get("/api/map");
   const tiles = new Uint8Array(await response.arrayBuffer());
   const area = site.width * site.height;
-  const offset = naturalOre - first;
+  const offset = Math.floor((naturalOre-first)/1024)*site.width + (naturalOre-first)%1024;
   assert.equal(tiles.length, area * 3);
   assert.equal(Number(response.headers.get("X-Map-Revision")), placed.state.revision);
   assert.equal(tiles[offset], mine.id);
@@ -141,7 +145,11 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   const solar = catalog.buildings.find(building => building.art === "solar");
   const remote = { ...save, tiles: [[last, solar.id]], structures: [], longOrbit: true,
     planetBounds: null, weatherForecasts: null, map: { seed: 1, abundance: 0, paint: {} }, space: null };
-  save.space = { bases: { [orbit.id]: remote }, ships: [] };
+  const terminator = network.sites.find(site => site.id === "terminator");
+  const climateBase = { ...remote, longOrbit: false, tiles: [[511*1024+511, solar.id]],
+    planetBounds: { width: terminator.width, height: terminator.height },
+    map: { seed: terminator.seed, abundance: 10, paint: {}, densityPercent: true } };
+  save.space = { bases: { [orbit.id]: remote, [terminator.id]: climateBase }, ships: [] };
   const imported = await command("import", { save, revision: restored.revision });
   const selected = await command("select-base", { base: orbit.id, revision: imported.state.revision });
   const remoteResponse = await get("/api/map");
@@ -155,4 +163,13 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   await command("build", { index: last + 1, type: solar.id, revision: selected.state.revision }, 400);
   const removed = await command("remove", { index: last, revision: selected.state.revision });
   assert.equal(removed.edits[0].index, last);
+  const climateSite = await command("select-base", { base: terminator.id, revision: removed.state.revision });
+  const terrain = await get("/api/climate");
+  const before = new DataView(await terrain.arrayBuffer());
+  assert.equal(before.byteLength, terminator.width * terminator.height * 5);
+  assert.equal(Number(terrain.headers.get("X-World-Revision")), climateSite.state.worldRevision);
+  const changed = await command("climate", { climate: { baseTemperature: 10, humidity: 0 }, revision: climateSite.state.revision });
+  const after = new DataView(await (await get("/api/climate")).arrayBuffer());
+  assert.equal(changed.state.climate.baseTemperature, 10);
+  assert.equal(after.getInt16(2,true)-before.getInt16(2,true), 100);
 });

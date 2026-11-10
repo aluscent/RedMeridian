@@ -5,6 +5,8 @@ const canvas = $("map"), ctx = canvas.getContext("2d", {alpha:false});
 const size = 1024, number = new Intl.NumberFormat();
 let catalog, stats, metrics, techCards, tileSprites, buildingSprites, masks, geology;
 let surfaceSettings={seed:0,abundance:100,paint:{}}, surfaceRevision=-1;
+let climateData, climateOverlay="terrain", climateFormKey="";
+const waterNames=["Land","Frozen ocean","Liquid ocean","Dry seabed"];
 let widths, heights, owners, mapSite, mapWorldRevision=-1;
 const environmentSprites=new Map();
 let spriteEnvironment="planet";
@@ -96,8 +98,27 @@ function footprint(x,y,w,h,color,stroke,target=ctx) {
 function blocked(x,y,recipe) {
   const {width:w,height:h}=recipe.footprint;
   if(!inside([x+w-1,y+h-1]) || (recipe.deposit && deposit(y*size+x)?.id!==recipe.deposit)) return true;
-  for(let dy=0;dy<h;dy++) for(let dx=0;dx<w;dx++) if(owners[mapOffset(x+dx,y+dy)]) return true;
+  for(let dy=0;dy<h;dy++) for(let dx=0;dx<w;dx++) {
+    const cell=mapOffset(x+dx,y+dy);
+    if(owners[cell]) return true;
+    if(climateData) {
+      const elevation=climateData.getUint8(cell*5), water=climateData.getUint8(cell*5+4);
+      if(elevation===0 || elevation===15 || (water===2 && elevation<6)) return true;
+    }
+  }
   return false;
+}
+function climateColor(cell) {
+  const at=cell*5;
+  const elevation=climateData.getUint8(at), water=climateData.getUint8(at+4);
+  if(climateOverlay==="elevation") return "hsla("+(220-elevation*12)+",70%,50%,.70)";
+  if(climateOverlay==="sunlight") return "rgba(255,222,95,"+climateData.getUint8(at+1)/125+")";
+  if(climateOverlay==="temperature") {
+    const temperature=climateData.getInt16(at+2,true);
+    return "hsla("+(220-Math.max(0,Math.min(220,(temperature+800)/8)))+",80%,55%,.65)";
+  }
+  if(elevation===0 || elevation===15) return "#171c26d0";
+  return [null,"#addbefe0","#174d83da","#b5874378"][water];
 }
 function terrainShade(x,y) {
   const grain = Math.imul(x+19,374761393)^Math.imul(y+13,668265263);
@@ -138,6 +159,10 @@ function terrainChunk(left,top,right,bottom,raster) {
       else {
         const ore=deposit((top+y)*size+left+x);
         g.drawImage(tileSprites[shade+(ore?ore.index*8:0)],px-49,py);
+        if(climateData) {
+          const color=climateColor(mapOffset(left+x,top+y));
+          if(color) Sprites.polygon(g,[[px,py],[px+48,py+24],[px,py+48],[px-48,py+24]],color);
+        }
       }
     }
   }
@@ -194,7 +219,7 @@ function rebuildScene(water) {
   const y1=Math.min(top+spanY-1,Math.ceil(Math.max(...corners.map(p=>p[1]))));
   drawTerrain(ground,x0,y0,x1,y1);
   const buildings=[];
-  const wetColor=water>=10?'rgba(47,119,135,'+Math.min(.75,.22+water/160)+')':null;
+  const wetColor=!climateData && water>=10?'rgba(47,119,135,'+Math.min(.75,.22+water/160)+')':null;
   for(let diagonal=x0+y0;diagonal<=x1+y1;diagonal++) {
     for(let x=Math.max(x0,diagonal-y1);x<=Math.min(x1,diagonal-y0);x++) {
       const y=diagonal-x, cell=mapOffset(x,y), type=grid[cell];
@@ -256,7 +281,7 @@ function draw() {
     return;
   }
   const water=state.planet["surface-water"] || 0;
-  const key=[mapWorldRevision,mapRevision,cx,cy,scale,width,height,dpr,water].join(",");
+  const key=[mapWorldRevision,mapRevision,cx,cy,scale,width,height,dpr,water,climateOverlay].join(",");
   if(key!==sceneKey) {
     rebuildScene(water);
     sceneKey=key;
@@ -325,6 +350,7 @@ function frame(time) {
     const measure=state?.developerMode;
     const start=measure?performance.now():0;
     draw();
+    if(state?.climate) showClimateTile(cursor || selected);
     placeInfo();
     if(measure) {
       record(drawTimes,performance.now()-start);
@@ -423,6 +449,18 @@ function setProperty(element,name,value) {
 function display(next) {
   const redraw=!state || state.storm!==next.storm || state.planet["surface-water"]!==next.planet["surface-water"];
   state=next;
+  setProperty($("climateControls"),"hidden",!next.climate);
+  setProperty($("climateReadout"),"hidden",!next.climate);
+  if(next.climate) {
+    const {baseTemperature,humidity,effectiveBase}=next.climate;
+    const key=[next.site.id,baseTemperature,humidity].join(",");
+    if(climateFormKey!==key) {
+      $("baseTemperature").value=baseTemperature;
+      $("humidity").value=humidity;
+      climateFormKey=key;
+    }
+    setText($("climateBase"),"Effective base: "+(effectiveBase/10).toFixed(1)+" °C. Changing climate may flood structures.");
+  } else climateFormKey="";
   document.body.classList.toggle("playing",next.started);
   setProperty($("loadSaved"),"disabled",!next.hasSave);
   const entries=catalog.materials.map(m=>{
@@ -504,7 +542,8 @@ async function syncMap() {
   const site=state.site, revision=state.worldRevision;
   const requests=[fetch("/api/map",{cache:"no-store"}),useEnvironmentSprites(site.kind)];
   if(surfaceRevision!==revision) requests.push(fetch("/api/surface",{cache:"no-store"}));
-  const [response,,terrain]=await Promise.all(requests);
+  if(surfaceRevision!==revision && state.climate) requests.push(fetch("/api/climate",{cache:"no-store"}));
+  const [response,,terrain,climate]=await Promise.all(requests);
   if(!response.ok) throw new Error("Could not load the sector map.");
   if(Number(response.headers.get("X-World-Revision"))!==revision) throw new Error("Base changed during map load.");
   const cells=new Uint8Array(await response.arrayBuffer()), area=site.width*site.height;
@@ -512,7 +551,16 @@ async function syncMap() {
   if(terrain) {
     if(!terrain.ok) throw new Error("Could not load geology.");
     if(Number(terrain.headers.get("X-World-Revision"))!==revision) throw new Error("Base changed during terrain load.");
+    let climateView;
+    if(climate) {
+      if(!climate.ok || Number(climate.headers.get("X-World-Revision"))!==revision)
+        throw new Error("Base changed during climate load.");
+      const data=await climate.arrayBuffer();
+      if(data.byteLength!==area*5) throw new Error("Incomplete climate map.");
+      climateView=new DataView(data);
+    }
     surfaceSettings=await terrain.json();
+    climateData=climateView;
     surfaceRevision=revision;
     resetTerrainCache();
   }
@@ -607,6 +655,35 @@ function inspectTile([x,y]) {
   $("inspect").textContent=x+", "+y+"  ·  "+(recipe?.name || resource?.name ||
     (state.site.kind==="orbit" ? "Open station tile" : "Open regolith"));
 }
+function showClimateTile(tile) {
+  if(!climateData || !tile || mapWorldRevision!==state?.worldRevision || !inside(tile)) {
+    setText($("climateReadout"),"Point at a tile to inspect its climate.");
+    return;
+  }
+  const [x,y]=tile, at=mapOffset(x,y)*5;
+  const elevation=climateData.getUint8(at), sun=climateData.getUint8(at+1);
+  const temperature=climateData.getInt16(at+2,true)/10, water=climateData.getUint8(at+4);
+  const parts=[x+", "+y,"Elevation "+elevation+(elevation===6?" (shore)":""),waterNames[water],
+    sun+"% sunlight",temperature.toFixed(1)+" °C"];
+  const recipe=catalog.buildings[mode-1];
+  if(recipe && !anchor && !blocked(x,y,recipe)) {
+    if(recipe.art==="solar") parts.push("Expected solar output: "+Math.round(recipe.generation*sun/100));
+    if(recipe.minimumTemperature!==null || recipe.maximumTemperature!==null) {
+      const min=recipe.minimumTemperature ?? "unbounded", max=recipe.maximumTemperature ?? "unbounded";
+      parts.push("Operating range: "+min+" to "+max+" °C");
+    }
+    let floodRisk=false, tooHotOrCold=false;
+    for(let dy=0;dy<recipe.footprint.height;dy++) for(let dx=0;dx<recipe.footprint.width;dx++) {
+      const footprintCell=mapOffset(x+dx,y+dy)*5;
+      const phase=climateData.getUint8(footprintCell+4), degrees=climateData.getInt16(footprintCell+2,true)/10;
+      floodRisk ||= phase===1 || phase===3;
+      tooHotOrCold ||= degrees<(recipe.minimumTemperature ?? -500) || degrees>(recipe.maximumTemperature ?? 500);
+    }
+    if(tooHotOrCold) parts.push("Outside operating temperature");
+    if(floodRisk) parts.push("Flood risk if ice melts or the seabed refills");
+  }
+  setText($("climateReadout"),parts.join(" · "));
+}
 function placeInfo() {
   const box=$("buildingInfo");
   if(box.hidden || !state?.inspected) return;
@@ -648,6 +725,7 @@ function updateInfo(info) {
     "Workers "+info.workers+" / "+info.crew];
   if(info.ratedPowerOutput) lines.push("Power output "+info.powerOutput+" / "+info.ratedPowerOutput);
   if(info.ratedPowerUse) lines.push("Power draw "+info.powerUse+" / "+info.ratedPowerUse);
+  if(info.temperatureBlocked) lines.push("Offline: footprint is outside the operating temperature range.");
   if(Object.keys(info.outputs).length) lines.push("Yield "+formatAmounts(info.outputs)+" / operating tick");
   if(recipe.forecastsWeather) {
     const forecast=info.weatherForecast;
@@ -751,6 +829,15 @@ canvas.addEventListener("keydown",event=>{
 });
 document.addEventListener("keydown",event=>{if(event.key==="Escape") chooseMode(0);});
 $("home").onclick=center;
+$("climateOverlay").onchange=()=>{
+  climateOverlay=$("climateOverlay").value;
+  resetTerrainCache();
+  requestDraw();
+};
+$("climateForm").onsubmit=event=>{
+  event.preventDefault();
+  command("climate",{climate:{baseTemperature:Number($("baseTemperature").value),humidity:Number($("humidity").value)}});
+};
 $("in").onclick=()=>zoom(1.2);
 $("out").onclick=()=>zoom(1/1.2);
 $("inspectMode").onclick=()=>chooseMode(0);
