@@ -114,24 +114,25 @@ function blocked(x,y,recipe) {
 function climateColor(cell,x,y) {
   const at=cell*5;
   const elevation=climateData.getUint8(at), water=climateData.getUint8(at+4);
-  if(climateOverlay==="elevation") return "hsla("+(220-elevation*12)+",70%,50%,.70)";
-  if(climateOverlay==="sunlight") return "rgba(255,222,95,"+climateData.getUint8(at+1)/125+")";
-  if(climateOverlay==="temperature") {
-    const temperature=climateData.getInt16(at+2,true);
-    return "hsla("+(220-Math.max(0,Math.min(220,(temperature+800)/8)))+",80%,55%,.65)";
-  }
   const sun=climateData.getUint8(at+1)/100;
   const temperature=climateData.getInt16(at+2,true)/10;
+  const warmth=Math.max(-1,Math.min(1,temperature/70));
+  if(climateOverlay==="elevation") return "hsla(32,18%,"+(25+elevation*3)+"%,.65)";
+  if(climateOverlay==="sunlight") return "hsla(41,28%,"+(27+sun*46)+"%,.66)";
+  if(climateOverlay==="temperature") return warmth<0
+    ? "hsla(209,18%,56%,"+(.25-warmth*.43)+")"
+    : "hsla(25,44%,59%,"+(.25+warmth*.43)+")";
   const east=x+1<mapSite.left+mapSite.width ? climateData.getUint8((cell+1)*5) : elevation;
   const south=y+1<mapSite.top+mapSite.height ? climateData.getUint8((cell+mapSite.width)*5) : elevation;
   const relief=elevation*.7+(elevation-east)*2+(south-elevation);
-  const light=14+sun*33+relief;
-  if(elevation===0 || elevation===15) return "hsla(220,22%,"+light*.58+"%,.84)";
-  if(water===2) return "hsl("+(224-elevation*4)+",64%,"+(light*.58+elevation*5)+"%)";
-  if(water===1) return "hsl(200,56%,"+(light*.65+34)+"%)";
-  const warmth=Math.max(-1,Math.min(1,temperature/50));
-  return "hsla("+(warmth<0 ? 220+warmth*12 : 38-warmth*32)+","+
-    (32+Math.abs(warmth)*42)+"%,"+light+"%,"+(water===3 ? .73 : .58)+")";
+  const light=30+sun*17+relief*.65;
+  if(elevation===0) return "hsl(203,23%,"+(31+sun*7)+"%)";
+  if(elevation===15) return "hsla(32,12%,"+(light+9)+"%,.7)";
+  if(water===2) return "hsl("+(206-elevation*3)+",30%,"+(31+sun*6+elevation*3.3)+"%)";
+  if(water===1) return "hsl(202,17%,"+(57+sun*12+elevation*.5)+"%)";
+  const hue=warmth<0 ? 38-warmth*13 : 34-warmth*10;
+  const saturation=warmth<0 ? 23+warmth*10 : 25+warmth*12;
+  return "hsla("+hue+","+saturation+"%,"+light+"%,"+(water===3 ? .75 : .58)+")";
 }
 function terrainShade(x,y) {
   const grain = Math.imul(x+19,374761393)^Math.imul(y+13,668265263);
@@ -245,9 +246,11 @@ function rebuildScene(water) {
       if(type) {
         const w=widths[cell], h=heights[cell];
         const [sx,sy]=screen(x+(w-1)/2,y+(h-1)/2);
-        const spriteScale=scale*Math.max(w,h);
-        if(sx+48*spriteScale>=0 && sx-48*spriteScale<width && sy+50*spriteScale>=0 && sy-50*spriteScale<height)
-          buildings.push([sx,sy,type,x,y,spriteScale,w,h,x+y+w+h]);
+        const spriteScale=scale*(w+h)/2;
+        // Align the bottom of the sprite to the front corner of the footprint.
+        const spriteY=sy+(w+h+2)*12*scale-50*spriteScale;
+        if(sx+48*spriteScale>=0 && sx-48*spriteScale<width && spriteY+50*spriteScale>=0 && spriteY-50*spriteScale<height)
+          buildings.push([sx,spriteY,type,x,y,spriteScale,w,h,x+y+w+h]);
       }
     }
   }
@@ -258,7 +261,7 @@ function rebuildScene(water) {
 }
 
 function drawBuilding(target,[px,py,type,x,y,spriteScale,w,h]) {
-  if(w>1 || h>1) footprint(x,y,w,h,"#30252280","#bd916b",target);
+  if((w>1 || h>1) && mapSite.kind!=="orbit") footprint(x,y,w,h,"#30252260","#9b795e",target);
   target.drawImage(buildingSprites[type-1],px-48*spriteScale,py-50*spriteScale,96*spriteScale,100*spriteScale);
 }
 
@@ -319,10 +322,8 @@ function draw() {
     ctx.drawImage(groundLayer,0,0,width,height);
     drawHighlight(highlight);
     for(const building of drawnBuildings) {
-      const [px,py, , , ,s,bw,bh]=building;
-      // Multi-tile platforms can extend below their sprites.
-      const bottom=Math.max(50*s,(bw+bh+2)*12*scale);
-      if(px+48*s+2<x0 || px-48*s-2>x1 || py+bottom+2<y0 || py-50*s-2>y1) continue;
+      const [px,py, , , ,s]=building;
+      if(px+48*s+2<x0 || px-48*s-2>x1 || py+50*s+2<y0 || py-50*s-2>y1) continue;
       drawBuilding(ctx,building);
       if(building===active) footprint(x,y,w,h,"#ffffff00","#ffd09e");
     }
@@ -944,11 +945,14 @@ async function loadSprite(building,path=building.image,fallback=null,source=null
     try { await image.decode(); }
     catch { return template; }
   }
-  const sprite=Object.assign(document.createElement("canvas"),{width:96,height:100});
+  const density=Math.max(2,building.footprint.width,building.footprint.height);
+  const sprite=Object.assign(document.createElement("canvas"),{width:96*density,height:100*density});
   const iw=image.naturalWidth || image.width, ih=image.naturalHeight || image.height;
-  const fit=Math.min(96/iw,100/ih);
+  const fit=Math.min(sprite.width/iw,sprite.height/ih);
   const w=iw*fit,h=ih*fit;
-  sprite.getContext("2d").drawImage(image,(96-w)/2,100-h,w,h);
+  const g=sprite.getContext("2d");
+  g.imageSmoothingQuality="high";
+  g.drawImage(image,(sprite.width-w)/2,sprite.height-h,w,h);
   return sprite;
 }
 async function useEnvironmentSprites(site) {
@@ -978,7 +982,15 @@ async function useEnvironmentSprites(site) {
   });
 }
 
-const spriteMasks=sprites=>sprites.map(sprite=>sprite.getContext("2d").getImageData(0,0,96,100).data);
+function spriteMasks(sprites) {
+  const canvas=Object.assign(document.createElement("canvas"),{width:96,height:100});
+  const g=canvas.getContext("2d",{willReadFrequently:true});
+  return sprites.map(sprite=>{
+    g.clearRect(0,0,96,100);
+    g.drawImage(sprite,0,0,96,100);
+    return g.getImageData(0,0,96,100).data;
+  });
+}
 async function initialize() {
   try {
     const response=await fetch("/api/catalog",{cache:"no-store"});

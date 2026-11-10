@@ -96,7 +96,8 @@ body.playing main{max-width:none;padding-inline:clamp(6px,1.3vw,22px)}
 .map-tools{justify-content:flex-start}
 canvas#map{height:clamp(440px,calc(100dvh - 230px),1100px)}
 .map-panel{position:absolute;top:8px;right:8px;z-index:5;max-height:calc(100% - 16px);overflow:auto;background:var(--panel);border:1px solid var(--line);box-shadow:0 8px 25px #0009}
-.panel-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.panel-heading{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;
+  gap:8px;margin:-12px -12px 8px;padding:10px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
 .panel-heading h2{margin:0}
 .construction-panel{width:min(300px,78%)}
 .control-panel{width:min(590px,82%)}

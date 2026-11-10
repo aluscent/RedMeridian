@@ -128,7 +128,10 @@ known destinations and travel distances in the Solar System. **Construction**
 opens a side panel within the map.
 
 Default building and resource artwork is in `wwwroot/assets/refresh` as separate
-planetary and orbital atlases. To add galaxy-specific art, place an
+planetary and orbital atlases. The higher-resolution structure sheets provide
+dedicated art for large surface facilities and for station modules, including
+a single orbital docking collar. The renderer anchors large sprites to their
+full footprints. To add galaxy-specific art, place an
 `artwork.json` in `wwwroot/assets/galaxies/<galaxy-id>/`. Its optional
 `planet` and `orbit` arrays list asset names like `building-1` or
 `resource-water`. Put the PNG in the corresponding environment directory.
