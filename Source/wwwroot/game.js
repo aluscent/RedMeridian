@@ -9,7 +9,7 @@ let climateData, climateOverlay="terrain", climateFormKey="";
 const waterNames=["Land","Frozen ocean","Liquid ocean","Dry seabed"];
 let widths, heights, owners, mapSite, mapWorldRevision=-1;
 const environmentSprites=new Map();
-let spriteEnvironment="planet";
+let spriteEnvironment;
 
 function makeStats(name,icon) {
   const el = document.createElement("details");
@@ -19,7 +19,7 @@ function makeStats(name,icon) {
   summary.firstElementChild.textContent=icon;
   summary.title=name;
   $("stats").append(el);
-  return [summary,summary.lastElementChild,detail,name];
+  return [summary,summary.lastElementChild,detail,name,summary.firstElementChild];
 }
 function makeMetric(metric) {
   const el = document.createElement("div");
@@ -114,24 +114,25 @@ function blocked(x,y,recipe) {
 function climateColor(cell,x,y) {
   const at=cell*5;
   const elevation=climateData.getUint8(at), water=climateData.getUint8(at+4);
-  if(climateOverlay==="elevation") return "hsla("+(220-elevation*12)+",70%,50%,.70)";
-  if(climateOverlay==="sunlight") return "rgba(255,222,95,"+climateData.getUint8(at+1)/125+")";
-  if(climateOverlay==="temperature") {
-    const temperature=climateData.getInt16(at+2,true);
-    return "hsla("+(220-Math.max(0,Math.min(220,(temperature+800)/8)))+",80%,55%,.65)";
-  }
   const sun=climateData.getUint8(at+1)/100;
   const temperature=climateData.getInt16(at+2,true)/10;
+  const warmth=Math.max(-1,Math.min(1,temperature/70));
+  if(climateOverlay==="elevation") return "hsla(32,18%,"+(25+elevation*3)+"%,.65)";
+  if(climateOverlay==="sunlight") return "hsla(41,28%,"+(27+sun*46)+"%,.66)";
+  if(climateOverlay==="temperature") return warmth<0
+    ? "hsla(209,18%,56%,"+(.25-warmth*.43)+")"
+    : "hsla(25,44%,59%,"+(.25+warmth*.43)+")";
   const east=x+1<mapSite.left+mapSite.width ? climateData.getUint8((cell+1)*5) : elevation;
   const south=y+1<mapSite.top+mapSite.height ? climateData.getUint8((cell+mapSite.width)*5) : elevation;
   const relief=elevation*.7+(elevation-east)*2+(south-elevation);
-  const light=14+sun*33+relief;
-  if(elevation===0 || elevation===15) return "hsla(220,22%,"+light*.58+"%,.84)";
-  if(water===2) return "hsl("+(224-elevation*4)+",64%,"+(light*.58+elevation*5)+"%)";
-  if(water===1) return "hsl(200,56%,"+(light*.65+34)+"%)";
-  const warmth=Math.max(-1,Math.min(1,temperature/50));
-  return "hsla("+(warmth<0 ? 220+warmth*12 : 38-warmth*32)+","+
-    (32+Math.abs(warmth)*42)+"%,"+light+"%,"+(water===3 ? .73 : .58)+")";
+  const light=30+sun*17+relief*.65;
+  if(elevation===0) return "hsl(203,23%,"+(31+sun*7)+"%)";
+  if(elevation===15) return "hsla(32,12%,"+(light+9)+"%,.7)";
+  if(water===2) return "hsl("+(206-elevation*3)+",30%,"+(31+sun*6+elevation*3.3)+"%)";
+  if(water===1) return "hsl(202,17%,"+(57+sun*12+elevation*.5)+"%)";
+  const hue=warmth<0 ? 38-warmth*13 : 34-warmth*10;
+  const saturation=warmth<0 ? 23+warmth*10 : 25+warmth*12;
+  return "hsla("+hue+","+saturation+"%,"+light+"%,"+(water===3 ? .75 : .58)+")";
 }
 function terrainShade(x,y) {
   const grain = Math.imul(x+19,374761393)^Math.imul(y+13,668265263);
@@ -245,9 +246,11 @@ function rebuildScene(water) {
       if(type) {
         const w=widths[cell], h=heights[cell];
         const [sx,sy]=screen(x+(w-1)/2,y+(h-1)/2);
-        const spriteScale=scale*Math.max(w,h);
-        if(sx+48*spriteScale>=0 && sx-48*spriteScale<width && sy+50*spriteScale>=0 && sy-50*spriteScale<height)
-          buildings.push([sx,sy,type,x,y,spriteScale,w,h,x+y+w+h]);
+        const spriteScale=scale*(w+h)/2;
+        // Align the bottom of the sprite to the front corner of the footprint.
+        const spriteY=sy+(w+h+2)*12*scale-50*spriteScale;
+        if(sx+48*spriteScale>=0 && sx-48*spriteScale<width && spriteY+50*spriteScale>=0 && spriteY-50*spriteScale<height)
+          buildings.push([sx,spriteY,type,x,y,spriteScale,w,h,x+y+w+h]);
       }
     }
   }
@@ -258,7 +261,7 @@ function rebuildScene(water) {
 }
 
 function drawBuilding(target,[px,py,type,x,y,spriteScale,w,h]) {
-  if(w>1 || h>1) footprint(x,y,w,h,"#30252280","#bd916b",target);
+  if((w>1 || h>1) && mapSite.kind!=="orbit") footprint(x,y,w,h,"#30252260","#9b795e",target);
   target.drawImage(buildingSprites[type-1],px-48*spriteScale,py-50*spriteScale,96*spriteScale,100*spriteScale);
 }
 
@@ -319,10 +322,8 @@ function draw() {
     ctx.drawImage(groundLayer,0,0,width,height);
     drawHighlight(highlight);
     for(const building of drawnBuildings) {
-      const [px,py, , , ,s,bw,bh]=building;
-      // Multi-tile platforms can extend below their sprites.
-      const bottom=Math.max(50*s,(bw+bh+2)*12*scale);
-      if(px+48*s+2<x0 || px-48*s-2>x1 || py+bottom+2<y0 || py-50*s-2>y1) continue;
+      const [px,py, , , ,s]=building;
+      if(px+48*s+2<x0 || px-48*s-2>x1 || py+50*s+2<y0 || py-50*s-2>y1) continue;
       drawBuilding(ctx,building);
       if(building===active) footprint(x,y,w,h,"#ffffff00","#ffd09e");
     }
@@ -438,7 +439,7 @@ function populateMenu() {
     const tech=catalog.research.find(t=>t.id===recipe.research);
     const site=catalog.world.deposits.find(d=>d.id===recipe.deposit);
     button.title=[recipe.detail || buildingDetail(recipe),site?.name,tech && "Research: "+tech.name].filter(Boolean).join(" · ");
-    button.onclick=()=>chooseMode(i+1);
+    button.onclick=()=>{chooseMode(i+1);canvas.focus({preventScroll:true});};
     $("builds").append(button);
   });
   $("category").onchange=()=>{
@@ -476,7 +477,6 @@ function display(next) {
     setText($("climateBase"),"Effective base: "+(effectiveBase/10).toFixed(1)+" °C. Changing climate may flood structures.");
   } else climateFormKey="";
   document.body.classList.toggle("playing",next.started);
-  setProperty($("loadSaved"),"disabled",!next.hasSave);
   const entries=catalog.materials.map(m=>{
     const delta=next.delta[m.id];
     return [number.format(next.stock[m.id]),(delta>0?"+":"")+number.format(delta)+" / tick",delta];
@@ -501,16 +501,19 @@ function display(next) {
   setProperty($("engineering"),"hidden",!next.site.planetaryEngineering);
   const unlocked=new Set(next.unlocked);
   const available=new Set(next.allowedBuildings);
+  const researchMaterial=catalog.world.researchMaterial;
+  setText($('researchProgress'),number.format(next.stock[researchMaterial])+" RP in stock / "+
+    number.format(next.delta[researchMaterial])+" RP net per tick");
   catalog.research.forEach((t,i)=>{
     const [card,detail,button]=techCards[i];
     const active=unlocked.has(t.id);
     const missing=t.requires.filter(id=>!unlocked.has(id));
-    const points=next.stock[catalog.world.researchMaterial];
+    const points=next.stock[researchMaterial];
     const requirements=missing.map(id=>catalog.research.find(other=>other.id===id).name);
     card.classList.toggle("positive",active);
     setProperty(button,"hidden",active);
     setProperty(button,"disabled",points<t.points || missing.length>0);
-    setText(detail,active?"Active":
+    setText(detail,active?"Active":points>=t.points && !missing.length?"Ready to activate":
       number.format(points)+" / "+number.format(t.points)+" RP"+
       (requirements.length?" · Activate first: "+requirements.join(", "):""));
   });
@@ -524,6 +527,7 @@ function display(next) {
   setText($("pause"),next.paused?"Resume":"Pause");
   setText($("speed"),next.speed+"× speed");
   setProperty($("save"),"disabled",next.stress);
+  setProperty($("saveAs"),"disabled",next.stress);
   setProperty($("weather"),"hidden",!next.storm);
   setText($("world"),next.stress?"Benchmark sector":next.site.name);
   setText($("clock"),"Sol "+(Math.floor(next.tick/24)+1)+" · "+String(next.tick%24).padStart(2,"0")+":00");
@@ -554,7 +558,7 @@ function applyTileEdit(edit) {
 }
 async function syncMap() {
   const site=state.site, revision=state.worldRevision;
-  const requests=[fetch("/api/map",{cache:"no-store"}),useEnvironmentSprites(site.kind)];
+  const requests=[fetch("/api/map",{cache:"no-store"}),useEnvironmentSprites(site)];
   if(surfaceRevision!==revision) requests.push(fetch("/api/surface",{cache:"no-store"}));
   if(surfaceRevision!==revision && state.climate) requests.push(fetch("/api/climate",{cache:"no-store"}));
   const [response,,terrain,climate]=await Promise.all(requests);
@@ -627,6 +631,7 @@ async function command(action,extra={}) {
       chooseMode(0);
       center();
     }
+    if(response.ok && ["menu","save","import"].includes(action)) await refreshSaveMenu();
     await refreshLogistics();
     if(selected) inspectTile(selected);
     notice(result.message,!response.ok);
@@ -862,15 +867,29 @@ $("inspectMode").onclick=()=>chooseMode(0);
 $("salvage").onclick=()=>chooseMode(-1);
 $("area").onclick=()=>setArea(!areaMode);
 for(const action of ["save","pause","speed","stress"]) $(action).onclick=()=>command(action);
-$("openLogistics").onclick=()=>{
-  const panel=$("logistics");
-  panel.open=true;
-  panel.scrollIntoView({block:"start"});
-  panel.querySelector("summary").focus({preventScroll:true});
-};
-$("logistics").addEventListener("toggle",()=> {
-  $("openLogistics").setAttribute("aria-expanded",String($("logistics").open));
-});
+const controlTabs=[...document.querySelectorAll("[data-control]")];
+let activePanel, controlTab="researchPanel";
+function openPanel(id, tab=controlTab) {
+  activePanel=id;
+  $("constructionPanel").hidden=id!=="constructionPanel";
+  $("controlPanel").hidden=id!=="controlPanel";
+  controlTab=tab;
+  for(const button of controlTabs) {
+    const active=button.dataset.control===tab;
+    $(button.dataset.control).hidden=!active;
+    setAttribute(button,"aria-pressed",String(active));
+  }
+  setAttribute($("openConstruction"),"aria-expanded",String(id==="constructionPanel"));
+  setAttribute($("openControl"),"aria-expanded",String(id==="controlPanel"));
+  setAttribute($("openLogistics"),"aria-expanded",String(id==="controlPanel" && tab==="logistics"));
+  refreshLogistics().catch(error=>notice(error.message,true));
+}
+$("openControl").onclick=()=>openPanel(activePanel==="controlPanel" ? undefined : "controlPanel");
+$("openConstruction").onclick=()=>openPanel(activePanel==="constructionPanel" ? undefined : "constructionPanel");
+$("openLogistics").onclick=()=>openPanel("controlPanel","logistics");
+$("closeConstruction").onclick=()=>{openPanel();$("openConstruction").focus();};
+$("closeControl").onclick=()=>{openPanel();$("openControl").focus();};
+for(const button of controlTabs) button.onclick=()=>openPanel("controlPanel",button.dataset.control);
 $("testerGrant").onsubmit=event=>{
   event.preventDefault();
   command("tester-grant",{material:$("testerMaterial").value,amount:Number($("testerAmount").value)});
@@ -892,7 +911,20 @@ $("closeInfo").onclick=()=>{
   requestDraw();
 };
 $("mainMenu").onclick=()=>{if(confirm("Return to the main menu? Unsaved progress will be discarded.")) command("menu");};
-$("loadSaved").onclick=()=>command("load");
+async function refreshSaveMenu() {
+  const response=await fetch("/api/saves",{cache:"no-store"});
+  if(!response.ok) throw new Error("Could not read colony saves.");
+  const saves=await response.json();
+  setOptions($("saveSelect"),saves.map(save=>[
+    save.id,save.name+" ("+new Date(save.updated).toLocaleString()+")"
+  ]));
+  $("saveSelect").disabled=$("loadSaved").disabled=saves.length===0;
+}
+$("loadSaved").onclick=()=>command("load",{saveSlot:$("saveSelect").value});
+$("saveAs").onclick=()=>{
+  const name=prompt("New save name");
+  if(name?.trim()) command("save",{saveSlot:name.trim()});
+};
 $("importFromMenu").onclick=$("import").onclick=()=>$("file").click();
 $("file").onchange=async event=>{
   const [file]=event.target.files;
@@ -903,34 +935,62 @@ $("file").onchange=async event=>{
     await command("import",{save:JSON.parse(await file.text())});
   } catch(error) { notice(error.message,true); }
 };
-async function loadSprite(building,path=building.image,fallback=null) {
+async function loadSprite(building,path=building.image,fallback=null,source=null) {
   const template=fallback ?? Sprites.buildings[Math.max(0,Sprites.art.indexOf(building.art))];
-  if(!path) return template;
-  const image=new Image();
-  image.src=path;
-  try { await image.decode(); }
-  catch { console.warn("Could not load building PNG:",path);return template; }
-  const sprite=Object.assign(document.createElement("canvas"),{width:96,height:100});
-  const fit=Math.min(96/image.naturalWidth,100/image.naturalHeight);
-  const w=image.naturalWidth*fit,h=image.naturalHeight*fit;
-  sprite.getContext("2d").drawImage(image,(96-w)/2,100-h,w,h);
+  if(!path && !source) return template;
+  let image=source;
+  if(!image) {
+    image=new Image();
+    image.src=path;
+    try { await image.decode(); }
+    catch { return template; }
+  }
+  const density=Math.max(2,building.footprint.width,building.footprint.height);
+  const sprite=Object.assign(document.createElement("canvas"),{width:96*density,height:100*density});
+  const iw=image.naturalWidth || image.width, ih=image.naturalHeight || image.height;
+  const fit=Math.min(sprite.width/iw,sprite.height/ih);
+  const w=iw*fit,h=ih*fit;
+  const g=sprite.getContext("2d");
+  g.imageSmoothingQuality="high";
+  g.drawImage(image,(sprite.width-w)/2,sprite.height-h,w,h);
   return sprite;
 }
-async function useEnvironmentSprites(kind) {
-  const environment=kind==="orbit" || kind==="asteroid" ? kind : "planet";
-  if(environment===spriteEnvironment) return;
-  if(!environmentSprites.has(environment)) {
-    const planet=environmentSprites.get("planet");
-    const sprites=await Promise.all(catalog.buildings.map((building,i)=>
-      loadSprite(building,building.environmentImages[environment] ?? "",planet.sprites[i])));
-    environmentSprites.set(environment,{sprites,masks:spriteMasks(sprites)});
-  }
-  ({sprites:buildingSprites,masks}=environmentSprites.get(environment));
-  spriteEnvironment=environment;
-  Array.from($("builds").children).forEach((button,i)=>button.firstElementChild.src=buildingSprites[i].toDataURL());
+async function useEnvironmentSprites(site) {
+  const env=Artwork.environment(site.kind), key=site.galaxy+"/"+env;
+  if(key===spriteEnvironment) return;
+  if(!environmentSprites.has(key)) environmentSprites.set(key,(async()=>{
+    const [sprites,icons]=await Promise.all([
+      Promise.all(catalog.buildings.map(async building=>loadSprite(
+        building,building.environmentImages?.[env] ?? building.image,null,
+        await Artwork.sprite(site.galaxy,env,"building",building.id)))),
+      Promise.all(catalog.materials.map(material=>Artwork.sprite(site.galaxy,env,"resource",material.id)))
+    ]);
+    return {sprites,masks:spriteMasks(sprites),icons};
+  })());
+  const {sprites,masks:nextMasks,icons}=await environmentSprites.get(key);
+  if(state?.site.id!==site.id) return;
+  buildingSprites=sprites;
+  masks=nextMasks;
+  spriteEnvironment=key;
+  Array.from($("builds").children).forEach((button,i)=>button.firstElementChild.src=sprites[i].toDataURL());
+  icons.forEach((icon,i)=>{
+    if(!icon) {stats[i][4].textContent=catalog.materials[i].symbol;return;}
+    const img=document.createElement("img");
+    img.alt="";
+    img.src=icon instanceof HTMLCanvasElement ? icon.toDataURL() : icon.src;
+    stats[i][4].replaceChildren(img);
+  });
 }
 
-const spriteMasks=sprites=>sprites.map(sprite=>sprite.getContext("2d").getImageData(0,0,96,100).data);
+function spriteMasks(sprites) {
+  const canvas=Object.assign(document.createElement("canvas"),{width:96,height:100});
+  const g=canvas.getContext("2d",{willReadFrequently:true});
+  return sprites.map(sprite=>{
+    g.clearRect(0,0,96,100);
+    g.drawImage(sprite,0,0,96,100);
+    return g.getImageData(0,0,96,100).data;
+  });
+}
 async function initialize() {
   try {
     const response=await fetch("/api/catalog",{cache:"no-store"});
@@ -961,7 +1021,6 @@ async function initialize() {
       Sprites.makeTiles(deposits)
     ]);
     masks=spriteMasks(buildingSprites);
-    environmentSprites.set("planet",{sprites:buildingSprites,masks});
     deposits.forEach(d=>{
       const key=document.createElement("span");
       key.style.color=d.colors[0];
@@ -972,6 +1031,7 @@ async function initialize() {
     createMapEditor(catalog,deposits,geology,map=>command("new",{map}));
     populateMenu();
     initializeLogistics();
+    await refreshSaveMenu();
     poll();
   } catch(error) {
     notice("Could not load the game catalog. "+error.message,true);

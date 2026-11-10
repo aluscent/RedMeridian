@@ -1,6 +1,6 @@
 namespace RedMeridian.Domain;
 
-sealed record ColonySite(string Id, string Name, string Kind, int Width, int Seed, int Abundance, int Distance, int? Length = null)
+sealed record ColonySite(string Id, string Name, string Kind, int Width, int Seed, int Abundance, int Distance, int? Length = null, string Galaxy = "milky-way")
 {
     static readonly string[] AsteroidDeposits = ["iron", "titanium", "uranium"];
     static readonly string[] MoonDeposits = ["ice", "brine", "silicon"];

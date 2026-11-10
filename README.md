@@ -117,7 +117,29 @@ in `Config/world.json`, and building temperature limits live in
 `Config/buildings.json`. Planetary engineering requires at least 200 sols
 of effective work per metric from its starting value.
 
-**Load saved colony** reads `%LOCALAPPDATA%\RedMeridian\colony.json`.
+**Load saved colony** opens the save selected in the main menu. The original
+`%LOCALAPPDATA%\RedMeridian\colony.json` remains available as **Default colony**.
+Use **Save as** to create a named slot. **Save colony** updates the active slot.
+Named slots live next to the default file in `colony.json.slots`.
+
+Open **Control Panel** for research milestones, engineering progress, shipyard
+orders, the fleet and launch controls, and the star map. The star map lists
+known destinations and travel distances in the Solar System. **Construction**
+opens a side panel within the map.
+
+Default building and resource artwork is in `wwwroot/assets/refresh` as separate
+planetary and orbital atlases. The higher-resolution structure sheets provide
+dedicated art for large surface facilities and for station modules, including
+a single orbital docking collar. The renderer anchors large sprites to their
+full footprints. To add galaxy-specific art, place an
+`artwork.json` in `wwwroot/assets/galaxies/<galaxy-id>/`. Its optional
+`planet` and `orbit` arrays list asset names like `building-1` or
+`resource-water`. Put the PNG in the corresponding environment directory.
+Missing or unreadable images fall back independently to the default atlas.
+
+The obsolete `Map Edition/Start Red Meridian.cmd` and three temporary sprite
+editing files were removed. The root launcher uses `Play`, and `Source`
+contains the editable application.
 **Import colony file** loads a separate colony JSON file into that slot.
 Generating a map leaves the existing disk save intact until you choose
 **Save colony**. Version 1–3 saves remain loadable. Existing buildings retain

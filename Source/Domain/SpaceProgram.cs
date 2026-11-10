@@ -62,6 +62,8 @@ sealed partial class Colony
     {
         Site.Id, stock = new Dictionary<string,long>(stock), delta = new Dictionary<string,long>(delta),
         dock = CanDock, relay = Online("relay"), assembly = Online("assembly"),
+        orders = assemblyOrders.Values.Select(order => new { order.Type, order.Index, order.TicksLeft,
+            running = CanDock && Group(order.Index).IsRunning(order.Index) }).ToArray(),
         reserves = rules.World.LifeSupport.ToDictionary(id => id,
             id => stock[id] == 0 ? 0L : delta[id] < 0 ? (long?)(stock[id] / -delta[id]) : null)
     };
@@ -84,11 +86,13 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
 
     static (int Fuel, int Ticks) Leg(ColonySite from, ColonySite to)
     {
-        int distance = Math.Max(1, Math.Abs(from.Distance - to.Distance));
+        int distance = Distance(from,to);
         int lift = from.PlanetaryEngineering || from.Kind == "moon" ? (distance > 1 ? 8 : 4) : 0;
         return (2 + lift + distance * 2, 2 + distance * 4);
     }
     static int FuelFor(int baseFuel, ShipType type) => (baseFuel * type.FuelPercent + 99) / 100;
+
+    static int Distance(ColonySite from,ColonySite to) => Math.Max(1,Math.Abs(from.Distance-to.Distance));
 
     public object Summary() => new
     {
@@ -104,7 +108,7 @@ sealed class SpaceProgram(GameRules rules, Colony mars)
         legs = ColonySite.All.SelectMany(from => ColonySite.All.Where(to => to != from).Select(to =>
         {
             var (fuel, ticks) = Leg(from, to);
-            return new { from = from.Id, to = to.Id, fuel, ticks };
+            return new { from = from.Id, to = to.Id, distance = Distance(from,to), fuel, ticks };
         })).ToArray()
     };
 
