@@ -5,7 +5,9 @@
     "payload": 60,
     "fuelPercent": 100,
     "buildTicks": 12,
-    "cost": { "alloy": 16 }
+    "cost": { "alloy": 16 },
+    "range": 12,
+    "speed": 6
   },
   {
     "id": "heavy-freighter",
@@ -13,6 +15,44 @@
     "payload": 180,
     "fuelPercent": 160,
     "buildTicks": 36,
-    "cost": { "alloy": 48, "titanium": 12 }
+    "cost": { "alloy": 48, "titanium": 12 },
+    "range": 30,
+    "speed": 4
+  },
+  {
+    "id": "stellar-explorer",
+    "name": "Stellar Explorer",
+    "payload": 320,
+    "fuelPercent": 100,
+    "buildTicks": 72,
+    "cost": { "alloy": 90, "titanium": 35, "silicon": 35 },
+    "range": 14000,
+    "speed": 960,
+    "fuelDistance": 40,
+    "research": "stellar-navigation"
+  },
+  {
+    "id": "galaxy-clipper",
+    "name": "Galaxy Clipper",
+    "payload": 550,
+    "fuelPercent": 100,
+    "buildTicks": 120,
+    "cost": { "alloy": 150, "titanium": 70, "silicon": 65, "uranium": 20 },
+    "range": 70000,
+    "speed": 2880,
+    "fuelDistance": 120,
+    "research": "intergalactic-drive"
+  },
+  {
+    "id": "deep-galaxy-ark",
+    "name": "Deep Galaxy Ark",
+    "payload": 1000,
+    "fuelPercent": 100,
+    "buildTicks": 192,
+    "cost": { "alloy": 320, "titanium": 180, "silicon": 150, "uranium": 70 },
+    "range": 650000,
+    "speed": 5760,
+    "fuelDistance": 350,
+    "research": "deep-galaxy-drive"
   }
 ]

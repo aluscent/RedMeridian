@@ -712,5 +712,30 @@
     "crew": 1,
     "colonistsPerHour": 1,
     "description": "Adds one colonist per hour while powered and staffed, with housing and life support available."
+  },
+  {
+    "id": 34,
+    "name": "Space Telescope",
+    "category": "Science",
+    "art": "telescope",
+    "spaceRole": "telescope",
+    "research": "orbital-optics",
+    "power": 4,
+    "crew": 1,
+    "cost": { "alloy": 80, "silicon": 25 },
+    "upgrades": [
+      { "multiplier": 2, "cost": { "alloy": 120, "silicon": 50, "research": 700 }, "extraPower": 2 },
+      { "multiplier": 3, "cost": { "alloy": 180, "titanium": 65, "research": 1000 }, "extraPower": 4 }
+    ],
+    "description": "Surveys nearby star systems from orbit. Each upgrade increases its observable range thirtyfold."
+  },
+  {
+    "id": 35,
+    "name": "Spacecraft Hub",
+    "category": "Space logistics",
+    "art": "hub",
+    "spaceRole": "hub",
+    "cost": { "alloy": 24 },
+    "description": "A passive landing and cargo facility. Newly founded bases start with this hub."
   }
 ]

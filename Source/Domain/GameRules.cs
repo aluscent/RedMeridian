@@ -2,9 +2,10 @@ using System.Text.Json;
 
 namespace RedMeridian.Domain;
 
-sealed record Material(string Id, string Name, string Symbol, long Initial);
-sealed record Technology(string Id, string Name, long Points, string[] Requires, long? LegacyPoints = null);
-sealed record ShipType(string Id, string Name, int Payload, int FuelPercent, int BuildTicks, Dictionary<string,int> Cost);
+sealed record Material(string Id, string Name, string Symbol, long Initial, string? Galaxy = null);
+sealed record Technology(string Id, string Name, long Points, string[] Requires, long? LegacyPoints = null, string? Galaxy = null);
+sealed record ShipType(string Id, string Name, int Payload, int FuelPercent, int BuildTicks, Dictionary<string,int> Cost,
+    int Range = 12, int Speed = 6, int FuelDistance = 1, string? Research = null);
 sealed record Deposit(string Id, string Name, int[] Buckets, string[] Colors);
 sealed record DepositOverride(int X, int Y, string Deposit);
 sealed record StarterTile(int X, int Y, int Building);
@@ -49,6 +50,7 @@ sealed record Building
     public int Priority { get; init; } = 70;
     public bool ForecastsWeather { get; init; }
     public string? SpaceRole { get; init; }
+    public string? Galaxy { get; init; }
     public string? Deposit { get; init; }
     public string? Research { get; init; }
     public int? MinimumTemperature { get; init; }
@@ -76,10 +78,21 @@ sealed class GameRules
         T Read<T>(string file) => JsonSerializer.Deserialize<T>(File.ReadAllText(Path.Combine(folder,file + ".json")),json)
             ?? throw new InvalidDataException($"Empty config: {file}.json");
 
-        Materials = Read<Material[]>("materials");
-        Research = Read<Technology[]>("research");
+        var specializations = StarChart.Galaxies.Where(galaxy => galaxy.Material is not null).ToArray();
+        Materials = [.. Read<Material[]>("materials"), .. specializations.Select(g =>
+            new Material(g.MaterialId, g.Material!, g.Specialty!, 0, g.Id))];
+        Research = [.. Read<Technology[]>("research"), .. specializations.Select(g =>
+            new Technology(g.Technology, g.Study!, 800, ["survey"], Galaxy: g.Id))];
         World = Read<WorldRules>("world");
-        Buildings = Read<Building[]>("buildings").OrderBy(b => b.Id).ToArray();
+        var configuredBuildings = Read<Building[]>("buildings").OrderBy(b => b.Id).ToArray();
+        Buildings = [.. configuredBuildings, .. specializations.Select((g, index) => new Building
+        {
+            Id = configuredBuildings.Length + index + 1, Name = g.Material + " Laboratory", Art = "lab",
+            Category = "Science", Galaxy = g.Id, Research = g.Technology, Power = 4, Crew = 1,
+            Cost = new() { ["alloy"] = 45, ["silicon"] = 15 },
+            Outputs = new() { [g.MaterialId] = 1, [World.ResearchMaterial] = 4 },
+            Description = $"Produces {g.Material} and research from local samples."
+        })];
         ShipTypes = Read<ShipType[]>("spacecraft");
         Require(World.EngineeringSols is >= 200 and <= 100_000, "Invalid minimum planetary engineering duration.");
         Require(World.Climates is null || World.Climates.All(item => item.Value is { Valid: true } &&
@@ -95,7 +108,10 @@ sealed class GameRules
         var shipIds = Unique(ShipTypes.Select(ship => ship.Id), "spacecraft");
         Require(shipIds.Contains(LegacyShipType) && ShipTypes.All(ship => !string.IsNullOrWhiteSpace(ship.Name) &&
             ship.Payload is > 0 and <= 10_000 && ship.FuelPercent is > 0 and <= 1_000 &&
-            ship.BuildTicks is > 0 and <= 100_000 && ship.Cost is not null && ship.Cost.Count > 0 &&
+            ship.BuildTicks is > 0 and <= 100_000 && ship.Range is > 0 and <= 1_000_000 &&
+            ship.Speed is > 0 and <= 100_000 && ship.FuelDistance is > 0 and <= 1_000 &&
+            (ship.Research is null || Research.Any(t => t.Id == ship.Research)) &&
+            ship.Cost is not null && ship.Cost.Count > 0 &&
             ship.Cost.All(item => materialIds.Contains(item.Key) && item.Value is > 0 and <= 100_000)),
             "Invalid spacecraft catalog or missing legacy cargo shuttle.");
         var metricIds = Unique(World.Metrics.Select(m => m.Id), "metric");
@@ -160,7 +176,7 @@ sealed class GameRules
                 new[] { b.Power,b.Generation,b.StormGeneration ?? 0,b.Crew,b.Beds,b.ColonistsPerHour,b.Storage,b.ChargeRate,b.DischargeRate }
                     .All(value => value is >= 0 and <= 1000), $"Invalid building definition for ID {b.Id} ({b.Name}).");
             Require(Surface.Fits(0,b.Footprint) && b.Upgrades.Length <= 2 &&
-                (b.Upgrades.Length == 0 || b.Deposit is not null && b.Outputs.Count > 0) &&
+                (b.Upgrades.Length == 0 || b.Deposit is not null && b.Outputs.Count > 0 || b.SpaceRole == "telescope") &&
                 b.Upgrades.All(u => u.Multiplier is >= 2 and <= 10 && Amounts(u.Cost,materialIds) &&
                     u.ExtraPower is >= 0 and <= 1000 && u.ExtraCrew is >= 0 and <= 1000),
                 $"Invalid footprint or upgrades for {b.Name}.");
@@ -171,7 +187,7 @@ sealed class GameRules
             Require((b.Image is null || ImagePath(b.Image)) && b.EnvironmentImages is not null &&
                 b.EnvironmentImages.All(item => item.Key is "planet" or "orbit" or "asteroid" && ImagePath(item.Value)),
                 $"Invalid PNG path for {b.Name}.");
-            Require(b.SpaceRole is null or "relay" or "assembly" or "terminal" or "dock",
+            Require(b.SpaceRole is null or "relay" or "assembly" or "terminal" or "dock" or "telescope" or "hub",
                 $"Unknown space role for {b.Name}.");
             Require((b.StormGeneration is null || b.Generation > 0) &&
                 (b.Generation == 0 || (b.Power == 0 && b.Storage == 0 && b.Outputs.Count == 0 && b.Effects.Count == 0 && b.Beds == 0 && b.ColonistsPerHour == 0)) &&

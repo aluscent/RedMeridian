@@ -132,13 +132,13 @@ sealed partial class Colony
         if (save.ActivatedResearch is null)
         {
             long points = colony.stock[rules.World.ResearchMaterial];
-            colony.activatedResearch.UnionWith(rules.Research.Where(item => rules.Unlocked(item.Id,points)).Select(item => item.Id));
+            colony.activatedResearch.UnionWith(rules.Research.Where(item => item.Galaxy is null && rules.Unlocked(item.Id,points)).Select(item => item.Id));
         }
         else
         {
             var activated = save.ActivatedResearch;
             if (activated.Length > rules.Research.Length || activated.Distinct().Count() != activated.Length ||
-                activated.Any(id => !rules.Research.Any(item => item.Id == id)))
+                activated.Any(id => !rules.Research.Any(item => item.Id == id && (item.Galaxy is null || item.Galaxy == colony.Site.Galaxy))))
                 throw new InvalidOperationException("Invalid activated research in colony save.");
             colony.activatedResearch.UnionWith(activated);
             if (activated.Any(id => !rules.Technology(id).Requires.All(colony.activatedResearch.Contains)))

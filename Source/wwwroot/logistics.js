@@ -1,6 +1,7 @@
 "use strict";
 
 let logistics, cargoInputs;
+let starZoom=0;
 const baseRows=new Map(), fleetRows=new Map();
 
 function pruneRows(rows,ids) {
@@ -42,6 +43,8 @@ function initializeLogistics() {
     $("routeMaterial").add(new Option(material.name,material.id));
   }
   $("baseSelect").onchange=event=>command("select-base",{base:event.target.value});
+  $("zoomStarsIn").onclick=()=>changeStarZoom(1);
+  $("zoomStarsOut").onclick=()=>changeStarZoom(-1);
   $("destination").onchange=$("shipSelect").onchange=renderFlightQuote;
   $("dispatchShip").onsubmit=event=>{
     event.preventDefault();
@@ -67,7 +70,8 @@ function renderFlightQuote() {
   const leg=logistics?.legs.find(leg=>leg.from===state.site.id && leg.to===destination);
   const ship=Number($("shipSelect").value);
   const type=catalog.shipTypes.find(type=>type.id===logistics?.ships.find(item=>item.id===ship)?.type);
-  const fuel=leg && type ? Math.ceil(leg.fuel*type.fuelPercent/100) : 0;
+  const flight=leg?.flights.find(flight=>flight.type===type?.id);
+  const fuel=flight?.fuel ?? 0;
   const recurring=logistics?.routes.some(route=>route.ship===ship);
   const founding=logistics && !logistics.bases.some(base=>base.id===destination);
   const cargo=flightCargo();
@@ -76,13 +80,85 @@ function renderFlightQuote() {
   if(leg) required.propellant=(required.propellant||0)+fuel;
   if(founding) required.alloy=(required.alloy||0)+logistics.foundingAlloy;
   const short=local && Object.entries(required).some(([id,amount])=>local.stock[id]<amount);
-  setProperty($("launchShip"),"disabled",Boolean(!leg || !type || recurring || short || units>type.payload || !local?.dock || !local.relay));
-  setProperty($("setRoute"),"disabled",Boolean(!ship || !leg || founding));
-  setText($("flightQuote"),leg && type
-    ? units+"/"+type.payload+" cargo · "+fuel+" fuel · "+leg.ticks+" ticks"
+  setProperty($("launchShip"),"disabled",Boolean(!flight || recurring || short || units>type.payload || !local?.dock || !local.relay));
+  setProperty($("setRoute"),"disabled",Boolean(!ship || !flight || founding));
+  setText($("flightQuote"),flight
+    ? number.format(leg.distance)+" UoD · "+units+"/"+type.payload+" cargo · "+number.format(fuel)+" fuel · "+number.format(flight.ticks)+" ticks"
       +(founding?" · "+logistics.foundingAlloy+" alloy founding kit":"")
       +(short?" · insufficient stock":"")+(recurring?" · recurring route assigned":"")
+    : leg && type ? number.format(leg.distance)+" UoD exceeds this spacecraft's "+number.format(type.range)+" UoD range."
     : "Choose an idle spacecraft and a destination. Build spacecraft from the assembly yard inspector.");
+}
+
+function updateExploration(telescope,index) {
+  const dialog=$("explorationDialog");
+  $("openExploration").onclick=()=>dialog.showModal();
+  const {level,range,online,survey}=telescope;
+  const stock=state.stock[catalog.world.researchMaterial];
+  let status="Level "+level+" · "+number.format(range)+" UoD range · "+number.format(stock)+" RP in stock";
+  if(survey) status+=" · "+(survey.galaxy?"Galaxy":"Star system")+" survey: "+
+    Math.ceil(survey.ticksLeft/24)+" sols remaining"+(online?"":" (paused)");
+  else if(!online) status+=" · Requires power and crew";
+  else if(!telescope.systems.available && !telescope.galaxies.available) status+=" · No undiscovered targets in range";
+  if(level<3) status+=" · Galaxy surveys require level 3";
+  setText($("explorationStatus"),status);
+  for(const [id,option,galaxy] of [["surveySystems",telescope.systems,false],["surveyGalaxies",telescope.galaxies,true]]) {
+    const button=$(id);
+    setText(button,(galaxy?"Survey galaxies":"Survey star systems")+" · "+option.sols+" sols · "+number.format(option.cost)+" RP");
+    setProperty(button,"disabled",Boolean(survey || !online || !option.available || stock<option.cost));
+    button.onclick=()=>command("explore",{index,galaxySurvey:galaxy});
+  }
+}
+
+function changeStarZoom(delta) {
+  starZoom=Math.max(0,Math.min(5,starZoom+delta));
+  drawStarChart();
+}
+
+function drawStarChart() {
+  const origin=logistics?.systems.find(system=>system.id===state.site.system);
+  if(!origin) return;
+  const canvas=$("starChart"), g=canvas.getContext("2d");
+  const x=canvas.width/2, y=canvas.height/2, radius=y-16;
+  const radial=distance=>Math.log10(1+distance)*radius/(6-starZoom);
+  g.clearRect(0,0,canvas.width,canvas.height);
+  g.font="10px system-ui";
+  g.textAlign="left";
+  g.textBaseline="middle";
+  for(const distance of [1,10,100,1000,10000,100000]) {
+    const r=radial(distance);
+    if(r>radius) break;
+    g.strokeStyle="#42536a";
+    g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.stroke();
+    g.fillStyle="#9caabd";
+    g.fillText(number.format(distance),x+3,y-r-5);
+  }
+  const marks=[];
+  function mark(name,distance,angle,color,glyph) {
+    const r=radial(distance);
+    if(r>radius) return;
+    g.fillStyle=color;
+    g.textAlign="center";
+    g.font=(glyph==="◉"?"15":"12")+"px system-ui";
+    const px=x+Math.cos(angle)*r, py=y+Math.sin(angle)*r;
+    g.fillText(glyph,px,py);
+    marks.push({px,py,label:name+" · "+number.format(Math.ceil(distance))+" UoD"});
+  }
+  const planets=logistics.sites.filter(site=>site.system===origin.id && site.planetaryEngineering);
+  planets.forEach((site,i)=>mark(site.name,Math.max(site.distance,.6),i*2.4,"#80e4db","○"));
+  for(const star of logistics.systems.filter(system=>system.galaxy===origin.galaxy && system.id!==origin.id))
+    mark(star.name,Math.hypot(star.x-origin.x,star.y-origin.y),Math.atan2(star.y-origin.y,star.x-origin.x),"#ffd885","◇");
+  for(const galaxy of logistics.galaxies.filter(galaxy=>galaxy.id!==origin.galaxy))
+    mark(galaxy.name,Math.hypot(galaxy.x-origin.x,galaxy.y-origin.y),Math.atan2(galaxy.y-origin.y,galaxy.x-origin.x),"#d3adff","◉");
+  mark(origin.name,0,0,"#ffe2a2","✦");
+  canvas.onmousemove=event=>{
+    const px=event.offsetX*canvas.width/canvas.clientWidth, py=event.offsetY*canvas.height/canvas.clientHeight;
+    const match=marks.filter(mark=>Math.hypot(mark.px-px,mark.py-py)<8);
+    setProperty(canvas,"title",match.map(mark=>mark.label).join("\n"));
+  };
+  setText($("travelMapOrigin"),origin.name);
+  setProperty($("zoomStarsIn"),"disabled",starZoom===5);
+  setProperty($("zoomStarsOut"),"disabled",starZoom===0);
 }
 
 function setList(list,values,empty) {
@@ -104,10 +180,22 @@ async function refreshLogistics() {
   logistics=await response.json();
   if($("controlPanel").hidden) return;
   const names=new Map(logistics.sites.map(site=>[site.id,site.name]));
+  const systems=new Map(logistics.systems.map(system=>[system.id,system]));
+  const origin=systems.get(state.site.system);
+  if(!origin) return;
+  const distance=site=>{
+    if(site.system===origin.id) return site.distance;
+    const target=systems.get(site.system);
+    return Math.ceil(Math.hypot(target.x-origin.x,target.y-origin.y));
+  };
+  const destinationLabel=site=>site.name+" · "+systems.get(site.system).name+" · "+number.format(distance(site))+" UoD";
+  const mapSlot=$("systemPanel").hidden ? $("travelMapSlot") : $("systemPanel");
+  if($("travelMap").parentElement!==mapSlot) mapSlot.prepend($("travelMap"));
+  drawStarChart();
   if(!$("systemPanel").hidden) {
-    const known=logistics.legs.filter(leg=>leg.from===state.site.id).sort((a,b)=>a.distance-b.distance);
-    setList($("systemMap"),["Solar System (current system)",...known.map(leg=>
-      names.get(leg.to)+" — "+leg.distance+" distance units")]);
+    const known=[...logistics.sites].sort((a,b)=>distance(a)-distance(b));
+    setList($("systemMap"),[...known.map(destinationLabel),...logistics.galaxies.filter(g=>g.id!==origin.galaxy).map(g=>
+      g.name+" · "+number.format(Math.ceil(Math.hypot(g.x-origin.x,g.y-origin.y)))+" UoD")]);
     return;
   }
   const bases=logistics.bases;
@@ -116,7 +204,7 @@ async function refreshLogistics() {
   setOptions($("baseSelect"),bases.map(base=>[base.id,names.get(base.id)]));
   setProperty($("baseSelect"),"value",state.site.id);
   setOptions($("destination"),logistics.sites.filter(site=>site.id!==local.id)
-    .map(site=>[site.id,names.get(site.id)+(bases.some(base=>base.id===site.id)?"":" (found base)")]));
+    .map(site=>[site.id,destinationLabel(site)+(bases.some(base=>base.id===site.id)?"":" (found base)")]));
   setOptions($("shipSelect"),logistics.ships.filter(ship=>ship.location===local.id && !ship.destination)
     .map(ship=>[ship.id,catalog.shipTypes.find(type=>type.id===ship.type).name+" #"+ship.id]));
 

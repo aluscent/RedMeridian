@@ -54,7 +54,11 @@ sealed partial class Colony
         allowedBuildings = rules.Buildings.Where(building => Site.Allows(building)).Select(building => building.Id).ToArray();
         counts = new int[rules.Buildings.Length];
         surface = new Surface(rules,map);
-        if (rules.World.Climates?.GetValueOrDefault(Site.Id) is { } profile)
+        var galaxy = StarChart.Galaxies.Single(item => item.Id == Site.Galaxy);
+        var profile = rules.World.Climates?.GetValueOrDefault(Site.Id);
+        if (profile is null && Site.Kind == "planet" && galaxy.World is not null)
+            profile = new(galaxy.Temperature, 28, 25, 20, 50, 20, -5, 50);
+        if (profile is not null)
         {
             var settings = climateSettings ?? profile.Initial;
             if (!settings.Valid) throw new InvalidOperationException("Invalid map temperature or humidity.");
@@ -114,7 +118,7 @@ sealed partial class Colony
         if (b.Art != "solar") return b.Generation;
         return Site.Kind switch
         {
-            "orbit" => Site.Distance >= 5 ? b.Generation / 2 : b.Generation * 3 / 2,
+            "orbit" => Site.Distance >= 3 ? b.Generation / 2 : b.Generation * 3 / 2,
             "moon" => b.Generation / 2,
             _ => (b.Generation*group.Sunlight+50)/100
         };
@@ -250,6 +254,8 @@ sealed partial class Colony
     {
         var milestone = rules.Research.FirstOrDefault(item => item.Id == id)
             ?? throw new InvalidOperationException("Select a research milestone.");
+        if (milestone.Galaxy is not null && milestone.Galaxy != Site.Galaxy)
+            throw new InvalidOperationException("This milestone belongs to another galaxy.");
         if (activatedResearch.Contains(milestone.Id))
             throw new InvalidOperationException("This milestone is already active.");
         if (stock[rules.World.ResearchMaterial] < milestone.Points)
@@ -266,11 +272,13 @@ sealed partial class Colony
         colony.activatedResearch = activatedResearch;
     }
 
+    public bool HasResearch(string? id) => id is null || activatedResearch.Contains(id);
+
     public object Status(int revision,bool stress,bool paused,int speed,bool started = true,bool hasSave = false,
-        int worldRevision = 0,int inspect = -1,bool developerMode = false) => new
+        int worldRevision = 0,int inspect = -1,bool developerMode = false,TelescopeStatus? telescope = null) => new
     {
         revision, stress, paused, speed, tick, started, hasSave, worldRevision, developerMode, site = Site, allowedBuildings,
-        inspected = Inspect(inspect), stock = new Dictionary<string,long>(stock),
+        inspected = Inspect(inspect), telescope, stock = new Dictionary<string,long>(stock),
         delta = new Dictionary<string,long>(delta), population, housing,
         supply = generated, demand, used, crewUsed, crewCapacity = population * rules.World.CrewPerColonist,
         batteryCharge = power.Charge, batteryCapacity = power.Capacity, batteryAvailable = power.Available,

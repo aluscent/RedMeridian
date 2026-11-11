@@ -1,6 +1,7 @@
 namespace RedMeridian.Domain;
 
-sealed record ColonySite(string Id, string Name, string Kind, int Width, int Seed, int Abundance, int Distance, int? Length = null, string Galaxy = "milky-way")
+sealed record ColonySite(string Id, string Name, string Kind, int Width, int Seed, int Abundance, int Distance, int? Length = null,
+    string Galaxy = StarChart.HomeGalaxy, string System = StarChart.HomeSystem)
 {
     static readonly string[] AsteroidDeposits = ["iron", "titanium", "uranium"];
     static readonly string[] MoonDeposits = ["ice", "brine", "silicon"];
@@ -21,13 +22,14 @@ sealed record ColonySite(string Id, string Name, string Kind, int Width, int See
     [
         Mars,
         new("venus", "Venus Survey Outpost", "planet", 112, 92431, 100, 2, 120),
-        new("terminator", "The Terminator", "planet", 30, 57331, 10, 8, 360),
+        new("terminator", "The Terminator", "planet", 30, 57331, 10, 3, 360),
         new("mars-orbit-1", "Mars Orbit · Slot 1", "orbit", 5, 1, 0, 1, 150),
         new("mars-orbit-2", "Mars Orbit · Slot 2", "orbit", 5, 2, 0, 1, 150),
         new("ceres", "Ceres Mining Outpost", "asteroid", 32, 3107, 180, 3),
-        new("europa", "Europa Ice Fields", "moon", 316, -17031, 130, 6),
-        new("jupiter-orbit-1", "Jupiter Orbit · Slot 1", "orbit", 5, 3, 0, 5, 150),
-        new("jupiter-orbit-2", "Jupiter Orbit · Slot 2", "orbit", 5, 4, 0, 5, 150)
+        new("europa", "Europa Ice Fields", "moon", 316, -17031, 130, 3),
+        new("jupiter-orbit-1", "Jupiter Orbit · Slot 1", "orbit", 5, 3, 0, 3, 150),
+        new("jupiter-orbit-2", "Jupiter Orbit · Slot 2", "orbit", 5, 4, 0, 3, 150),
+        .. StarChart.RemoteSites
     ];
 
     public bool Contains(int index, Footprint footprint)
@@ -38,6 +40,8 @@ sealed record ColonySite(string Id, string Name, string Kind, int Width, int See
     }
 
     public bool Allows(Building building, bool restoring = false) =>
+        (building.Galaxy is null || building.Galaxy == Galaxy) &&
+        (building.SpaceRole != "telescope" || Kind == "orbit") &&
         (Kind == "mars" || !building.ForecastsWeather) &&
         (PlanetaryEngineering || restoring || building.Effects.Count == 0) &&
         (Kind == "orbit"

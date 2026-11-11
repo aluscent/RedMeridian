@@ -49,8 +49,8 @@ reading, including its original observation tick.
    assembly. It advances when the yard and cargo facility are operating. When
    the ship is ready, click **Space travel** above the map, select the spacecraft,
    and load cargo up to its capacity. A founding mission also costs
-   24 alloy and installs solar power, a habitat, communications, and a dock or
-   terminal. Pack food, water, alloy for new facilities, and return propellant.
+   24 alloy and installs a Spacecraft Hub that can receive cargo without power.
+   Pack food, water, alloy for power, housing and a relay, and return propellant.
 3. After arrival, switch views from the same panel. Build a Research Lab at an
    orbital station and reach 30 RP there. Ceres offers iron, titanium, and
    uranium. Europa offers ice, brine, and silicon, with weaker solar output.
@@ -58,23 +58,44 @@ reading, including its original observation tick.
    reserve, and destination reorder threshold. It makes repeat trips as
    supplies and fuel allow. Leave return propellant at the destination.
 
-All bases advance together. Cargo remains aboard if the destination's dock is
-offline or storage is full. Saving captures all bases, spacecraft, and routes.
+All bases advance together. Cargo remains aboard if the destination has no
+working cargo facility or storage is full. Saving captures bases, flights,
+routes, discoveries, and surveys in progress.
 Older single-colony saves open on Mars with an empty fleet.
 New orbital stations are 5 tiles wide and 150 tiles long. Existing orbital
 stations keep their saved layouts.
+
+## Explore beyond the Solar System
+
+Activate **Orbital optics**, then build and power a **Space Telescope** at an
+orbital base. Inspect it and select **Explore**. A star-system survey costs
+300 RP and takes eight operating sols. The telescope's range rises from
+600 to 18,000 to 540,000 UoD across its three levels. At level 3 a galaxy
+survey costs 2,000 RP and takes 30 operating sols. Surveys pause whenever the
+telescope loses power or crew. Discovering a galaxy reveals its primary
+system. To survey other systems there, establish an orbital telescope in
+that galaxy.
+
+The zoomable star map in **Space travel** displays known planets, systems,
+and galaxies on logarithmic distance rings. Select a destination to see the
+ship-specific fuel and time estimate. Stellar Explorers reach other systems
+in the Milky Way, Galaxy Clippers reach neighboring galaxies, and Deep Galaxy
+Arks can reach the ten distant galaxies. Those galaxies have their own worlds,
+survey milestones, and specialty materials.
 
 ## Activate research milestones
 
 Research Labs generate research points. Open **Research milestones** and click
 **Activate** when the colony has enough points and its prerequisites are active.
 Activation uses the selected base's points as a threshold and applies to all
-bases. Older saves retain the combined milestones unlocked across their bases.
+bases within its galaxy. Older saves retain the combined milestones unlocked
+across their Solar System bases.
 
 Edit `Source/Config/spacecraft.json` to configure spacecraft types. Each entry
-has an `id`, `name`, `payload`,
-`fuelPercent`, `buildTicks`, and a `cost` object keyed by material ID. Fuel is
-rounded up after applying the percentage to the route's standard fuel cost.
+has an `id`, `name`, `payload`, `fuelPercent`, `buildTicks`, and a `cost`
+object keyed by material ID. `range` is the maximum route distance in UoD,
+`speed` is UoD per sol, and `fuelDistance` scales cruise fuel with distance.
+`research` names the milestone needed to assemble the ship.
 Keep IDs stable because spacecraft and assembly orders reference them in saves.
 
 ## Tester mode
@@ -142,14 +163,15 @@ Named slots live next to the default file in `colony.json.slots`.
 
 Open **Control Panel** for research milestones, engineering progress, shipyard
 orders, the fleet and launch controls, and the star map. The star map lists
-known destinations and travel distances in the Solar System. **Construction**
+known destinations and their distances from the selected star system. **Construction**
 opens a side panel within the map.
 
 Default artwork is in `wwwroot/assets`. `planets-structures.png` supplies
 dedicated art for major surface structures, and `planet-buildings.png`
 supplies the rest of the surface buildings. The renderer centers square
 foundations within rectangular footprints. `orbit-structures.png` supplies
-the 18 buildable orbital facilities. Existing orbital core drills still
+18 orbital facility sprites. The Space Telescope and Spacecraft Hub use
+built-in sprites. Existing orbital core drills still
 load from saves and use the procedural drill sprite. Separate
 `resource-<id>.png` icons are shared by the surface and orbit interfaces.
 To add galaxy-specific art, place an

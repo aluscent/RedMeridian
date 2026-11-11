@@ -14,6 +14,8 @@ var rules = new GameRules(Path.Combine(AppContext.BaseDirectory, "Config"));
     ("Spacecraft found bases, retain blocked cargo, and restore without duplicate delivery", SpaceLogistics),
     ("Recurring routes respect reserves and avoid counting inbound cargo twice", RecurringCargo),
     ("Assembly pauses offline and preserves typed orders through saves", TimedAssembly),
+    ("Telescope surveys spend research, pause offline, and unlock systems and galaxies on schedule", TelescopeDiscovery),
+    ("Ship ranges, travel time, and galaxy research apply across discovered systems", IntergalacticTravel),
     ("Planetary engineering requires long-term investment and runs only on planets", PlanetaryEngineering),
     ("Meridian terrain has bounded slopes and rejects steep footprints", MeridianTerrain),
     ("Powered housing provides beds without workers", UnstaffedHousing),
@@ -221,6 +223,8 @@ void SpaceLogistics()
     var orbit = program.Base(orbitId);
     Equal(program.Mars.Tick, orbit.Tick);
     Equal(20L, orbit.Stock("alloy"));
+    Equal(rules.Buildings.Single(b => b.SpaceRole == "hub").Id, orbit.Export().Tiles!.Single()[1]);
+    Equal(true, orbit.CanDock);
     Equal(5, orbit.Site.Width);
     Equal(150, orbit.Site.Height);
     var legacy = program.Export();
@@ -235,8 +239,10 @@ void SpaceLogistics()
     Reject(() => orbit.Build(0, 1));
     int iron = rules.Buildings.Single(b => b.Deposit == "iron").Id;
     Reject(() => orbit.Build(510 * Colony.Size + 510, iron));
-    int lab = rules.Buildings.Single(b => b.Art == "lab" && b.Outputs.ContainsKey("research")).Id;
-    orbit.Receive(new() { ["alloy"] = 100 });
+    int lab = rules.Buildings.Single(b => b.Galaxy is null && b.Art == "lab" && b.Outputs.ContainsKey("research")).Id;
+    orbit.Receive(new() { ["alloy"] = 200 });
+    orbit.Build(510 * Colony.Size + 511, 1);
+    orbit.Build(510 * Colony.Size + 512, rules.Buildings.Single(b => b.SpaceRole == "relay").Id);
     orbit.Build(510 * Colony.Size + 510, lab);
     program.Step();
     Equal(milestone.Points+3, orbit.Stock("research"));
@@ -293,6 +299,104 @@ void TimedAssembly()
     long fuel = program.Mars.Stock("propellant");
     program.Dispatch(program.Mars, 2, "mars-orbit-1", new() { ["alloy"] = 70 });
     Equal(fuel - (8 * type.FuelPercent + 99) / 100, program.Mars.Stock("propellant"));
+}
+
+void TelescopeDiscovery()
+{
+    var program = LaunchReadyProgram();
+    const string orbitId = "mars-orbit-1";
+    int center = 511 * Colony.Size + 511;
+    int telescope = rules.Buildings.Single(b => b.SpaceRole == "telescope").Id;
+    Reject(() => program.Dispatch(program.Mars,1,"proxima-world",null));
+    Reject(() => program.Assemble(program.Mars,2,"deep-galaxy-ark"));
+    Reject(() => program.Mars.Build(4,telescope));
+    program.Dispatch(program.Mars,1,orbitId,null);
+    for (int i = 0; i < 6; i++) program.Step();
+    var orbit = program.Base(orbitId);
+    orbit.Receive(new() { ["research"] = 6000, ["alloy"] = 500, ["silicon"] = 100, ["titanium"] = 65 });
+    orbit.ActivateResearch("survey");
+    orbit.ActivateResearch("orbital-optics");
+    orbit.Build(center-1,1);
+    orbit.Build(center+1,telescope);
+    program.Step();
+    Equal(600, program.InspectTelescope(orbit,center+1)!.Range);
+    Reject(() => program.StartSurvey(orbit,center+1,true));
+    long before = orbit.Stock("research");
+    program.StartSurvey(orbit,center+1,false);
+    Equal(before - 300,orbit.Stock("research"));
+    Reject(() => program.StartSurvey(orbit,center+1,false));
+    orbit.Toggle(center+1);
+    program.Step();
+    program = SpaceProgram.Restore(rules,program.Export());
+    orbit = program.Base(orbitId);
+    Equal(8 * 24,program.InspectTelescope(orbit,center+1)!.Survey!.TicksLeft);
+    orbit.Toggle(center+1);
+    for (int i = 0; i < 8 * 24 - 1; i++) program.Step();
+    Equal(0,program.Export().Space!.Discovered!.Length);
+    program.Step();
+    Equal("proxima",program.Export().Space!.Discovered!.Single());
+    Equal(false,program.InspectTelescope(orbit,center+1)!.Systems.Available);
+    orbit.Upgrade(center+1);
+    Equal(18_000,program.InspectTelescope(orbit,center+1)!.Range);
+    Equal(true,program.InspectTelescope(orbit,center+1)!.Systems.Available);
+    orbit.Upgrade(center+1);
+    program.Step();
+    Equal(540_000,program.InspectTelescope(orbit,center+1)!.Range);
+    before = orbit.Stock("research");
+    program.StartSurvey(orbit,center+1,true);
+    Equal(before - 2000,orbit.Stock("research"));
+    for (int i = 0; i < 30 * 24 - 1; i++) program.Step();
+    Equal(1,program.Export().Space!.Discovered!.Length);
+    program.Step();
+    Equal(true,program.Export().Space!.Discovered!.Contains("lantern-primary"));
+}
+
+void IntergalacticTravel()
+{
+    Equal(10,StarChart.Galaxies.Count(g => StarChart.Distance(0,0,g.X,g.Y) > 150_000));
+    var program = LaunchReadyProgram();
+    var save = program.Export();
+    save = save with { Space = save.Space! with
+    {
+        Discovered = ["cinder-primary","cinder-outer"],
+        Ships = [new(1,"mars"), new(2,"mars",Type: "deep-galaxy-ark")]
+    }};
+    program = SpaceProgram.Restore(rules,save);
+    program.Step();
+    const string target = "cinder-primary-world";
+    long fuel = program.Mars.Stock("propellant");
+    Reject(() => program.Dispatch(program.Mars,1,target,null));
+    Equal(fuel,program.Mars.Stock("propellant"));
+    program.Mars.Receive(new() { ["propellant"] = 2000, ["silicon"] = 30 });
+    program.Dispatch(program.Mars,2,target,new() { ["alloy"] = 150, ["silicon"] = 30 });
+    var flight = program.Export().Space!.Ships[1];
+    Equal(true, flight.ArrivalTick - program.Mars.Tick > 600);
+    Equal(true, program.Mars.Stock("propellant") < fuel + 2000);
+    for (long tick = program.Mars.Tick; tick < flight.ArrivalTick; tick++) program.Step();
+    var world = program.Base(target);
+    Equal(1,world.Export().Tiles!.Length);
+    Equal(150L,world.Stock("alloy"));
+    Equal(true,world.CanDock);
+    Equal(42,world.Export().Climate!.BaseTemperature);
+    var galaxy = StarChart.Galaxies.Single(g => g.Id == "cinder");
+    world.Receive(new() { ["research"] = 1000 });
+    world.ActivateResearch("survey");
+    world.ActivateResearch(galaxy.Technology);
+    int center = 511 * Colony.Size + 511;
+    var lab = rules.Buildings.Single(b => b.Galaxy == galaxy.Id);
+    world.Build(center-1,1);
+    world.Build(center+1,lab.Id);
+    program.Step();
+    Equal(1L,world.Stock(galaxy.MaterialId));
+    Equal(false,program.Mars.HasResearch("survey"));
+    Reject(() => program.Mars.ActivateResearch(galaxy.Technology));
+    var nextSave = program.Export();
+    nextSave.Space!.Bases.Add("cinder-outer-orbit", world.Export() with
+        { Tiles = [[center,rules.Buildings.Single(b => b.SpaceRole == "hub").Id]],
+            Climate = null, PlanetBounds = null, LongOrbit = true, ActivatedResearch = [] });
+    program = SpaceProgram.Restore(rules,nextSave);
+    Equal(true,program.Base("cinder-outer-orbit").HasResearch(galaxy.Technology));
+    Equal(false,program.Mars.HasResearch(galaxy.Technology));
 }
 
 void PlanetaryEngineering()

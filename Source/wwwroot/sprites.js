@@ -206,10 +206,31 @@ const Sprites = (() => {
       polygon(ctx,[[4,-32],[-3,-15],[11,-15]],"#f2ede1");
       polygon(ctx,[[-3,14],[-8,24],[2,20]],"#d47755");
       polygon(ctx,[[11,14],[16,24],[6,20]],"#d47755");
+    },
+    ctx => {
+      prism(ctx,.10,.10,.80,.80,0,4,dark);
+      cylinder(ctx,0,24,13,12,"#5e7184","#9eaec0");
+      ctx.save();
+      ctx.translate(0,9);
+      ctx.rotate(-.62);
+      ctx.fillStyle="#aabccd";
+      ctx.fillRect(-25,-12,47,24);
+      ellipse(ctx,-25,0,7,12,"#6e7e90");
+      ellipse(ctx,22,0,9,12,"#d7e6ee");
+      ellipse(ctx,24,0,6,8,"#123950");
+      ellipse(ctx,25,-2,3,4,"#71d5e8");
+      ctx.restore();
+    },
+    ctx => {
+      prism(ctx,.08,.08,.84,.84,0,5,steel);
+      cylinder(ctx,0,22,24,8,"#415666","#8395a1");
+      ellipse(ctx,0,14,19,9,"#374652");
+      line(ctx,[[-10,13],[10,13]],"#9debe8",2);
+      line(ctx,[[0,8],[0,18]],"#9debe8",2);
     }
   );
   const art = ["solar","mine","extractor","greenhouse","refinery","habitat","lab","heat","algae","waterworks",
-    "battery","wind","reactor","shelter","tower","drill","launch"];
+    "battery","wind","reactor","shelter","tower","drill","launch","telescope","hub"];
   const buildings = models.map(model => make(96,100,ctx => {
     ctx.translate(48,50);
     ellipse(ctx,1,28,36,16,"#170c0a60");

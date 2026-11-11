@@ -440,7 +440,8 @@ function populateMenu() {
   $("category").onchange=()=>{
     const category=$("category").value;
     Array.from($("builds").children).forEach((button,i)=>{
-      button.hidden=Boolean(category && category!==catalog.buildings[i].category);
+      const building=catalog.buildings[i];
+      button.hidden=Boolean(category && category!==building.category || building.galaxy && building.galaxy!==state?.site.galaxy);
     });
     if(mode>0 && category && catalog.buildings[mode-1].category!==category) chooseMode(0);
   };
@@ -483,6 +484,8 @@ function display(next) {
     [next.population+" / "+next.housing,next.crewUsed+" / "+next.crewCapacity+" crew slots"]
   );
   entries.forEach(([value,detail,delta],i)=>{
+    const material=catalog.materials[i];
+    setProperty(stats[i][0].parentElement,"hidden",Boolean(material?.galaxy && material.galaxy!==next.site.galaxy && !next.stock[material.id]));
     setText(stats[i][1],value);
     setText(stats[i][2],detail);
     setAttribute(stats[i][0],"aria-label",stats[i][3]+" "+value);
@@ -501,6 +504,7 @@ function display(next) {
     number.format(next.delta[researchMaterial])+" RP net per tick");
   catalog.research.forEach((t,i)=>{
     const [card,detail,button]=techCards[i];
+    setProperty(card,"hidden",Boolean(t.galaxy && t.galaxy!==next.site.galaxy));
     const active=unlocked.has(t.id);
     const missing=t.requires.filter(id=>!unlocked.has(id));
     const points=next.stock[researchMaterial];
@@ -513,7 +517,9 @@ function display(next) {
       (requirements.length?" · Activate first: "+requirements.join(", "):""));
   });
   Array.from($("builds").children).forEach((button,i)=>{
-    const id=catalog.buildings[i].research;
+    const building=catalog.buildings[i], id=building.research;
+    const category=$("category").value;
+    setProperty(button,"hidden",Boolean(category && category!==building.category || building.galaxy && building.galaxy!==next.site.galaxy));
     const locked=Boolean(id && !unlocked.has(id));
     setProperty(button,"disabled",!available.has(i+1));
     button.classList.toggle("locked",locked);
@@ -621,6 +627,7 @@ async function command(action,extra={}) {
       frameTimes.length=drawTimes.length=0;
       $("frames").textContent="—";
       selected=cursor=anchor=undefined;
+      $("explorationDialog").close();
       $("buildingInfo").hidden=true;
       $("inspect").textContent="Select a tile to inspect it.";
       chooseMode(0);
@@ -711,9 +718,15 @@ function placeInfo() {
 function updateInfo(info) {
   const box=$("buildingInfo");
   const cell=selected && inside(selected) ? mapOffset(...selected) : -1;
-  if(!info || !state.started || mode!==0 || owners?.[cell]!==info.index+1) {box.hidden=true;return;}
+  if(!info || !state.started || mode!==0 || owners?.[cell]!==info.index+1) {
+    box.hidden=true;
+    $("explorationDialog").close();
+    return;
+  }
   const recipe=catalog.buildings[info.type-1];
   $("infoDescription").textContent=recipe.description;
+  $("openExploration").hidden=!state.telescope;
+  if(state.telescope) updateExploration(state.telescope,info.index);
   const assembly=$("shipAssembly");
   assembly.hidden=recipe.spaceRole!=="assembly" || state.stress;
   if(!assembly.hidden) {
@@ -721,10 +734,13 @@ function updateInfo(info) {
     const render=()=>{
       const type=catalog.shipTypes.find(item=>item.id===(info.assembly?.type ?? select.value));
       select.disabled=Boolean(info.assembly);
-      $("beginAssembly").disabled=Boolean(info.assembly) || !info.assemblyReady || !type;
+      const locked=type?.research && !state.unlocked.includes(type.research);
+      $("beginAssembly").disabled=Boolean(info.assembly) || !info.assemblyReady || !type || Boolean(locked);
       $("assemblyStatus").textContent=info.assembly
         ? type.name+" · "+info.assembly.ticksLeft+" ticks remaining"+(info.assemblyReady?"":" · Paused")
-        : type ? formatAmounts(type.cost)+" · "+type.buildTicks+" ticks · "+type.payload+" cargo · "+type.fuelPercent+"% fuel"+
+        : type ? formatAmounts(type.cost)+" · "+type.buildTicks+" ticks · "+type.payload+" cargo · "+
+          number.format(type.range)+" UoD range · "+number.format(type.speed)+" UoD/sol"+
+          (locked?" · Requires "+catalog.research.find(tech=>tech.id===type.research).name:"")+
           (info.assemblyReady?"":" · Requires an operating yard and cargo facility") : "";
     };
     select.onchange=render;
