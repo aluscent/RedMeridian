@@ -1,8 +1,6 @@
 "use strict";
 
 const Isometric=(() => {
-  // Vertical scale and shear corrections for the built-in 2:1 surface art.
-  const surfaceProjection={25:[1.10,.05],26:[1.02,.08],27:[.98,.18]};
   function project(x,y,scale,offsetX=0,offsetY=0) {
     return [offsetX+(x-y)*48*scale,offsetY+(x+y)*24*scale];
   }
@@ -48,7 +46,7 @@ const Isometric=(() => {
     else ctx.drawImage(tiles[shade+depositIndex*8],px-49,py);
   }
 
-  async function loadSprite(building,path=building.image,source=null,projection=[1,0]) {
+  async function loadSprite(building,path=building.image,source=null,squareFoundation=false) {
     const template=()=>Sprites.buildings[Math.max(0,Sprites.art.indexOf(building.art))];
     if(!path && !source) return template();
     let image=source;
@@ -61,12 +59,15 @@ const Isometric=(() => {
     const density=Math.max(2,building.footprint.width,building.footprint.height);
     const sprite=Object.assign(document.createElement("canvas"),{width:96*density,height:100*density});
     const iw=image.naturalWidth || image.width, ih=image.naturalHeight || image.height;
-    const [rise,tilt]=projection;
-    const fit=Math.min(sprite.width/iw,sprite.height/(ih*rise+iw*Math.abs(tilt)));
+    const {width,height}=building.footprint;
+    // The sheet has square foundations. Center the largest square within a
+    // rectangular footprint so the base edges keep the map's 2:1 projection.
+    const widthRatio=squareFoundation ? 2*Math.min(width,height)/(width+height) : 1;
+    const bottomInset=24*density*(1-widthRatio);
+    const fit=Math.min(sprite.width*widthRatio/iw,(sprite.height-bottomInset)/ih);
     const g=sprite.getContext("2d");
     g.imageSmoothingQuality="high";
-    g.setTransform(fit,tilt*fit,0,rise*fit,(sprite.width-iw*fit)/2,
-      sprite.height-(ih*rise+iw*Math.max(0,tilt))*fit);
+    g.setTransform(fit,0,0,fit,(sprite.width-iw*fit)/2,sprite.height-bottomInset-ih*fit);
     g.drawImage(image,0,0);
     return sprite;
   }
@@ -74,8 +75,8 @@ const Isometric=(() => {
   async function loadBuilding(building,kind,galaxy) {
     const env=Artwork.environment(kind);
     const source=await Artwork.sprite(galaxy,env,"building",building.id);
-    const projection=env==="planet" && source instanceof HTMLCanvasElement ? surfaceProjection[building.id] : undefined;
-    return loadSprite(building,building.environmentImages?.[env] ?? building.image,source,projection);
+    const squareFoundation=env==="planet" && Artwork.hasPlanetStructure(building.id) && source instanceof HTMLCanvasElement;
+    return loadSprite(building,building.environmentImages?.[env] ?? building.image,source,squareFoundation);
   }
 
   return {project,footprint,place,depth,drawFoundation,drawBuilding,shade,drawGround,loadSprite,loadBuilding};

@@ -28,6 +28,13 @@ test("both editions include the configured PNGs and correctly sized terrain asse
       const [width, height] = await pngDimensions(edition, image);
       assert.ok(width > 0 && height > 0, image);
     }
+    for (const [file, dimensions] of [
+      ["planet-structures", [2048, 1230]],
+      ["orbit-structures", [1100, 880]],
+      ["orbit", [588, 504]]
+    ]) {
+      assert.deepEqual(await pngDimensions(edition, `assets/refresh/${file}.png`), dimensions);
+    }
     assert.deepEqual(await pngDimensions(edition, "assets/martian-ground.png"), [784, 50]);
     for (const id of ["iron", "ice", "silicon", "titanium", "brine", "uranium", "vent"]) {
       assert.deepEqual(await pngDimensions(edition, `assets/deposit-${id}.png`), [98, 50], id);
@@ -198,6 +205,8 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   save.space = { bases: { [orbit.id]: remote, [terminator.id]: climateBase }, ships: [] };
   const imported = await command("import", { save, revision: restored.revision });
   const selected = await command("select-base", { base: orbit.id, revision: imported.state.revision });
+  assert.deepEqual([...selected.state.allowedBuildings].sort((a, b) => a - b),
+    [1, 4, 5, 6, 7, 11, 14, 15, 20, 21, 22, 23, 24, 25, 27, 29, 30, 32, 33]);
   const remoteResponse = await get("/api/map");
   const orbitCells = new Uint8Array(await remoteResponse.arrayBuffer());
   const orbitArea = orbit.width * orbit.height;
