@@ -23,10 +23,8 @@ jobs:
         run: dotnet run --project Tests/RedMeridian.Tests.csproj --configuration Release
       - name: Check browser scripts
         run: |
-          for edition in Source Play; do
-            for script in "$edition"/wwwroot/*.js; do
-              node --check "$script" || exit 1
-            done
+          for script in Source/wwwroot/*.js; do
+            node --check "$script" || exit 1
           done
       - name: Run asset and live API tests
         run: node --test Tests/game.test.mjs

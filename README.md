@@ -5,12 +5,18 @@ dimensions under `planetSizes` in `Config/world.json` within the 8,000–14,000
 tile range. Existing colonies retain their saved bounds, and tester mode
 still offers the 100,000-structure stress map.
 
-Run **Start Red Meridian.cmd** and open http://127.0.0.1:5287/?v=map-4.
-Keep the server window open. The Windows build requires the ASP.NET Core 8 runtime.
-The launcher runs the packaged game in `Play`, which includes its own web assets
-and configuration. `Source` contains the editable project used to build it.
-To build from source with the .NET 8 SDK, run
-`dotnet run --project Source -- --urls http://127.0.0.1:5287`.
+Install the .NET 8 SDK, run **Start Red Meridian.cmd**, and open
+http://127.0.0.1:5287/. Keep the server window open. Both Windows launchers
+build and run the project in `Source`, where the assets and catalogs are maintained.
+
+To make a standalone Windows build from the repository root, run:
+
+```sh
+dotnet publish Source/RedMeridian.csproj -c Release -r win-x64 --self-contained false -o dist/RedMeridian
+```
+
+On a machine with the ASP.NET Core 8 Runtime, run `RedMeridian.exe` from
+the published folder and open http://127.0.0.1:5274/.
 
 ## Run the tests
 
@@ -65,8 +71,8 @@ Research Labs generate research points. Open **Research milestones** and click
 Activation uses the selected base's points as a threshold and applies to all
 bases. Older saves retain the combined milestones unlocked across their bases.
 
-Edit `Play/Config/spacecraft.json` and mirror changes in `Source/Config` to
-configure spacecraft types. Each entry has an `id`, `name`, `payload`,
+Edit `Source/Config/spacecraft.json` to configure spacecraft types. Each entry
+has an `id`, `name`, `payload`,
 `fuelPercent`, `buildTicks`, and a `cost` object keyed by material ID. Fuel is
 rounded up after applying the percentage to the route's standard fuel cost.
 Keep IDs stable because spacecraft and assembly orders reference them in saves.
@@ -190,14 +196,12 @@ sprites. Center the object left to right. The tile diamond starts about halfway
 down the image and its front corner is near the bottom. Other sizes are fitted
 proportionally and bottom-aligned. One PNG supplies both the map sprite and
 construction icon. Multi-tile facilities scale the same art to their footprint.
-Use the asset directory under `Play` for the packaged game and under
-`Source` when running from source.
+Put repository artwork under `Source/wwwroot/assets`.
 
 ## Change the catalogs
 
-Edit the live files under **Play/Config**, then restart. Make corresponding
-changes under **Source/Config** when rebuilding. Keep existing building and
-material IDs stable so older saves still resolve.
+Edit the files under **Source/Config**, then restart. Keep existing building
+and material IDs stable so older saves still resolve.
 
 | File | Controls |
 |---|---|
