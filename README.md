@@ -7,6 +7,8 @@ still offers the 100,000-structure stress map.
 
 Run **Start Red Meridian.cmd** and open http://127.0.0.1:5287/?v=map-4.
 Keep the server window open. The Windows build requires the ASP.NET Core 8 runtime.
+The launcher runs the packaged game in `Play`, which includes its own web assets
+and configuration. `Source` contains the editable project used to build it.
 To build from source with the .NET 8 SDK, run
 `dotnet run --project Source -- --urls http://127.0.0.1:5287`.
 
@@ -137,21 +139,19 @@ orders, the fleet and launch controls, and the star map. The star map lists
 known destinations and travel distances in the Solar System. **Construction**
 opens a side panel within the map.
 
-Default building and resource artwork is in `wwwroot/assets/refresh` as separate
-planetary and orbital atlases. `planet-structures.png` supplies 12 surface
-structures and `planet.png` supplies the remaining surface art. In orbit,
-`orbit-structures.png` supplies station modules and `orbit.png` supplies
-the remaining building sprites and resource icons. The surface sheet uses square
-foundations, which the renderer centers within rectangular footprints.
+Default artwork is in `wwwroot/assets`. `planets-structures.png` supplies
+dedicated art for major surface structures, and `planet-buildings.png`
+supplies the rest of the surface buildings. The renderer centers square
+foundations within rectangular footprints. `orbit-structures.png` supplies
+the 18 buildable orbital facilities. Existing orbital core drills still
+load from saves and use the procedural drill sprite. Separate
+`resource-<id>.png` icons are shared by the surface and orbit interfaces.
 To add galaxy-specific art, place an
 `artwork.json` in `wwwroot/assets/galaxies/<galaxy-id>/`. Its optional
 `planet` and `orbit` arrays list asset names like `building-1` or
 `resource-water`. Put the PNG in the corresponding environment directory.
-Missing or unreadable images fall back independently to the default atlas.
+Missing or unreadable images fall back independently to the default artwork.
 
-The obsolete `Map Edition/Start Red Meridian.cmd` and three temporary sprite
-editing files were removed. The root launcher uses `Play`, and `Source`
-contains the editable application.
 **Import colony file** loads a separate colony JSON file into that slot.
 Generating a map leaves the existing disk save intact until you choose
 **Save colony**. Version 1–3 saves remain loadable. Existing buildings retain
@@ -175,17 +175,14 @@ structure intersecting the selection once.
 
 ## Replace a building's graphics
 
-1. Put a transparent PNG in **Play/wwwroot/assets**. For example, name it
-   `iron-mine.png`. Letters, numbers, hyphens, and underscores are supported.
-2. In **Play/Config/buildings.json**, find the building by its name or ID. Add
-   an `image` property and keep its existing `art` property as a fallback.
-3. Restart the server and reload the page. A missing or invalid PNG falls
-   back to the built-in art.
-
-The field looks like this inside the building's existing JSON object.
+1. Find the building ID in `Config/buildings.json`. The iron mine is ID 2.
+2. Put the PNG in the appropriate galaxy and environment directory. For
+   example, use `wwwroot/assets/galaxies/milky-way/planet/building-2.png`.
+3. Add the asset name to that environment's array in the galaxy's
+   `artwork.json`, then reload the page.
 
 ```json
-"image": "assets/iron-mine.png"
+{ "planet": ["building-2"] }
 ```
 
 Use a transparent **96×100** canvas for the closest alignment with the existing
@@ -193,7 +190,8 @@ sprites. Center the object left to right. The tile diamond starts about halfway
 down the image and its front corner is near the bottom. Other sizes are fitted
 proportionally and bottom-aligned. One PNG supplies both the map sprite and
 construction icon. Multi-tile facilities scale the same art to their footprint.
-Copy your PNG to **Source/wwwroot/assets** too if you build from source.
+Use the asset directory under `Play` for the packaged game and under
+`Source` when running from source.
 
 ## Change the catalogs
 

@@ -4,17 +4,12 @@
     "name": "Solar array",
     "category": "Power",
     "art": "solar",
-    "image": "assets/solar-array.png",
     "cost": {
       "alloy": 20
     },
     "generation": 8,
     "stormGeneration": 3,
     "description": "Generates electricity from sunlight, with reduced output in dust storms.",
-    "environmentImages": {
-      "planet": "assets/solar-array.png",
-      "asteroid": "assets/asteroid/solar-array.png"
-    },
     "minimumTemperature": -120,
     "maximumTemperature": 110
   },
@@ -23,7 +18,6 @@
     "name": "Iron mine",
     "category": "Extraction",
     "art": "mine",
-    "image": "assets/iron-mine.png",
     "cost": {
       "alloy": 25
     },
@@ -53,18 +47,13 @@
         "extraCrew": 2
       }
     ],
-    "description": "Extracts iron ore from a mapped deposit.",
-    "environmentImages": {
-      "planet": "assets/iron-mine.png",
-      "asteroid": "assets/asteroid/iron-mine.png"
-    }
+    "description": "Extracts iron ore from a mapped deposit."
   },
   {
     "id": 3,
     "name": "Ice extractor",
     "category": "Extraction",
     "art": "extractor",
-    "image": "assets/ice-extractor.png",
     "cost": {
       "alloy": 25
     },
@@ -95,10 +84,6 @@
       }
     ],
     "description": "Melts and purifies water ice for colony use.",
-    "environmentImages": {
-      "planet": "assets/ice-extractor.png",
-      "asteroid": "assets/asteroid/ice-extractor.png"
-    },
     "minimumTemperature": -70,
     "maximumTemperature": -10
   },
@@ -120,9 +105,6 @@
       "food": 5
     },
     "description": "Grows food from a steady supply of water.",
-    "environmentImages": {
-      "asteroid": "assets/asteroid/greenhouse.png"
-    },
     "minimumTemperature": -20,
     "maximumTemperature": 40
   },
@@ -131,7 +113,6 @@
     "name": "Refinery",
     "category": "Industry",
     "art": "refinery",
-    "image": "assets/refinery.png",
     "cost": {
       "alloy": 40
     },
@@ -144,18 +125,13 @@
     "outputs": {
       "alloy": 4
     },
-    "description": "Refines raw ore into structural alloy.",
-    "environmentImages": {
-      "planet": "assets/refinery.png",
-      "asteroid": "assets/asteroid/refinery.png"
-    }
+    "description": "Refines raw ore into structural alloy."
   },
   {
     "id": 6,
     "name": "Habitat",
     "category": "Life support",
     "art": "habitat",
-    "image": "assets/habitat.png",
     "cost": {
       "alloy": 50
     },
@@ -163,10 +139,6 @@
     "beds": 8,
     "priority": 0,
     "description": "Provides powered housing for colonists.",
-    "environmentImages": {
-      "planet": "assets/habitat.png",
-      "asteroid": "assets/asteroid/habitat.png"
-    },
     "minimumTemperature": -35,
     "maximumTemperature": 45
   },
@@ -175,7 +147,6 @@
     "name": "Research lab",
     "category": "Science",
     "art": "lab",
-    "image": "assets/research-lab.png",
     "cost": {
       "alloy": 60
     },
@@ -188,18 +159,13 @@
     "outputs": {
       "research": 3
     },
-    "description": "Turns alloy and staffed lab time into research points.",
-    "environmentImages": {
-      "planet": "assets/research-lab.png",
-      "asteroid": "assets/asteroid/research-lab.png"
-    }
+    "description": "Turns alloy and staffed lab time into research points."
   },
   {
     "id": 8,
     "name": "Heat plant",
     "category": "Terraforming",
     "art": "heat",
-    "image": "assets/heat-plant.png",
     "cost": {
       "alloy": 90
     },
@@ -214,18 +180,13 @@
       "temperature": 1,
       "pressure": 1
     },
-    "description": "Consumes ore and propellant to warm and pressurize a planet.",
-    "environmentImages": {
-      "planet": "assets/heat-plant.png",
-      "asteroid": "assets/asteroid/heat-plant.png"
-    }
+    "description": "Consumes ore and propellant to warm and pressurize a planet."
   },
   {
     "id": 9,
     "name": "Algae dome",
     "category": "Terraforming",
     "art": "algae",
-    "image": "assets/algae-dome.png",
     "cost": {
       "alloy": 110
     },
@@ -239,18 +200,13 @@
     "effects": {
       "oxygen": 1
     },
-    "description": "Uses water and silicon to produce atmospheric oxygen.",
-    "environmentImages": {
-      "planet": "assets/algae-dome.png",
-      "asteroid": "assets/asteroid/algae-dome.png"
-    }
+    "description": "Uses water and silicon to produce atmospheric oxygen."
   },
   {
     "id": 10,
     "name": "Waterworks",
     "category": "Terraforming",
     "art": "waterworks",
-    "image": "assets/waterworks.png",
     "cost": {
       "alloy": 120
     },
@@ -264,36 +220,26 @@
     "effects": {
       "surface-water": 1
     },
-    "description": "Invests water and alloy in long-term surface-water recovery.",
-    "environmentImages": {
-      "planet": "assets/waterworks.png",
-      "asteroid": "assets/asteroid/waterworks.png"
-    }
+    "description": "Invests water and alloy in long-term surface-water recovery."
   },
   {
     "id": 11,
     "name": "Battery bank",
     "category": "Power",
     "art": "battery",
-    "image": "assets/battery-bank.png",
     "cost": {
       "alloy": 40
     },
     "storage": 24,
     "chargeRate": 6,
     "dischargeRate": 8,
-    "description": "Stores surplus electricity and discharges when production falls short.",
-    "environmentImages": {
-      "planet": "assets/battery-bank.png",
-      "asteroid": "assets/asteroid/battery-bank.png"
-    }
+    "description": "Stores surplus electricity and discharges when production falls short."
   },
   {
     "id": 12,
     "name": "Wind turbine",
     "category": "Power",
     "art": "wind",
-    "image": "assets/wind-turbine.png",
     "cost": {
       "alloy": 60,
       "silicon": 10
@@ -301,11 +247,7 @@
     "generation": 5,
     "stormGeneration": 10,
     "research": "grid",
-    "description": "Generates electricity from local winds.",
-    "environmentImages": {
-      "planet": "assets/wind-turbine.png",
-      "asteroid": "assets/asteroid/wind-turbine.png"
-    }
+    "description": "Generates electricity from local winds."
   },
   {
     "id": 13,
@@ -324,17 +266,13 @@
       "width": 2,
       "height": 2
     },
-    "description": "Harnesses a geothermal vent for steady electricity.",
-    "environmentImages": {
-      "asteroid": "assets/asteroid/geothermal-station.png"
-    }
+    "description": "Harnesses a geothermal vent for steady electricity."
   },
   {
     "id": 14,
     "name": "Fuel-cell plant",
     "category": "Power",
     "art": "battery",
-    "image": "assets/fuel-cell-plant.png",
     "cost": {
       "alloy": 80,
       "silicon": 20
@@ -344,11 +282,7 @@
       "propellant": 2
     },
     "research": "grid",
-    "description": "Converts propellant into backup electricity when the grid needs it.",
-    "environmentImages": {
-      "planet": "assets/fuel-cell-plant.png",
-      "asteroid": "assets/asteroid/fuel-cell-plant.png"
-    }
+    "description": "Converts propellant into backup electricity when the grid needs it."
   },
   {
     "id": 15,
@@ -370,17 +304,13 @@
       "width": 2,
       "height": 2
     },
-    "description": "Generates dispatchable electricity from uranium.",
-    "environmentImages": {
-      "asteroid": "assets/asteroid/fission-reactor.png"
-    }
+    "description": "Generates dispatchable electricity from uranium."
   },
   {
     "id": 16,
     "name": "Silica quarry",
     "category": "Extraction",
     "art": "mine",
-    "image": "assets/silica-quarry.png",
     "cost": {
       "alloy": 45
     },
@@ -411,18 +341,13 @@
         "extraCrew": 2
       }
     ],
-    "description": "Quarries silicon from silicate deposits.",
-    "environmentImages": {
-      "planet": "assets/silica-quarry.png",
-      "asteroid": "assets/asteroid/silica-quarry.png"
-    }
+    "description": "Quarries silicon from silicate deposits."
   },
   {
     "id": 17,
     "name": "Titanium mine",
     "category": "Extraction",
     "art": "mine",
-    "image": "assets/titanium-mine.png",
     "cost": {
       "alloy": 65
     },
@@ -453,18 +378,13 @@
         "extraCrew": 2
       }
     ],
-    "description": "Extracts titanium from a mapped deposit.",
-    "environmentImages": {
-      "planet": "assets/titanium-mine.png",
-      "asteroid": "assets/asteroid/titanium-mine.png"
-    }
+    "description": "Extracts titanium from a mapped deposit."
   },
   {
     "id": 18,
     "name": "Brine well",
     "category": "Extraction",
     "art": "extractor",
-    "image": "assets/brine-well.png",
     "cost": {
       "alloy": 45
     },
@@ -496,10 +416,6 @@
       }
     ],
     "description": "Pumps brine from a mapped deposit.",
-    "environmentImages": {
-      "planet": "assets/brine-well.png",
-      "asteroid": "assets/asteroid/brine-well.png"
-    },
     "minimumTemperature": -30,
     "maximumTemperature": 35
   },
@@ -508,7 +424,6 @@
     "name": "Uranium mine",
     "category": "Extraction",
     "art": "mine",
-    "image": "assets/uranium-mine.png",
     "cost": {
       "alloy": 80,
       "titanium": 15
@@ -540,18 +455,13 @@
         "extraCrew": 2
       }
     ],
-    "description": "Extracts uranium from a mapped deposit.",
-    "environmentImages": {
-      "planet": "assets/uranium-mine.png",
-      "asteroid": "assets/asteroid/uranium-mine.png"
-    }
+    "description": "Extracts uranium from a mapped deposit."
   },
   {
     "id": 20,
     "name": "Desalination plant",
     "category": "Industry",
     "art": "waterworks",
-    "image": "assets/desalination-plant.png",
     "cost": {
       "alloy": 60
     },
@@ -565,18 +475,13 @@
       "water": 8
     },
     "research": "survey",
-    "description": "Processes brine into usable water.",
-    "environmentImages": {
-      "planet": "assets/desalination-plant.png",
-      "asteroid": "assets/asteroid/desalination-plant.png"
-    }
+    "description": "Processes brine into usable water."
   },
   {
     "id": 21,
     "name": "Propellant works",
     "category": "Industry",
     "art": "refinery",
-    "image": "assets/propellant-works.png",
     "cost": {
       "alloy": 90,
       "silicon": 20
@@ -591,18 +496,13 @@
       "propellant": 3
     },
     "research": "grid",
-    "description": "Manufactures propellant for spacecraft and fuel cells.",
-    "environmentImages": {
-      "planet": "assets/propellant-works.png",
-      "asteroid": "assets/asteroid/propellant-works.png"
-    }
+    "description": "Manufactures propellant for spacecraft and fuel cells."
   },
   {
     "id": 22,
     "name": "Crew shelter",
     "category": "Life support",
     "art": "shelter",
-    "image": "assets/crew-shelter.png",
     "cost": {
       "alloy": 25
     },
@@ -610,10 +510,6 @@
     "beds": 3,
     "priority": 1,
     "description": "Provides compact powered shelter for colonists.",
-    "environmentImages": {
-      "planet": "assets/crew-shelter.png",
-      "asteroid": "assets/asteroid/crew-shelter.png"
-    },
     "minimumTemperature": -55,
     "maximumTemperature": 50
   },
@@ -634,10 +530,7 @@
       "width": 2,
       "height": 2
     },
-    "description": "Adds high-density housing in a compact footprint.",
-    "environmentImages": {
-      "asteroid": "assets/asteroid/habitat-block.png"
-    }
+    "description": "Adds high-density housing in a compact footprint."
   },
   {
     "id": 24,
@@ -657,10 +550,7 @@
       "width": 3,
       "height": 3
     },
-    "description": "Provides large-scale housing in a sealed settlement.",
-    "environmentImages": {
-      "asteroid": "assets/asteroid/settlement-dome.png"
-    }
+    "description": "Provides large-scale housing in a sealed settlement."
   },
   {
     "id": 25,
@@ -686,10 +576,7 @@
       "width": 2,
       "height": 2
     },
-    "description": "Uses deep drilling to generate research.",
-    "environmentImages": {
-      "asteroid": "assets/asteroid/core-drilling-facility.png"
-    }
+    "description": "Uses deep drilling to generate research."
   },
   {
     "id": 26,
@@ -716,10 +603,7 @@
       "width": 3,
       "height": 2
     },
-    "description": "Conducts launch experiments that produce research.",
-    "environmentImages": {
-      "asteroid": "assets/asteroid/space-launch-site.png"
-    }
+    "description": "Conducts launch experiments that produce research."
   },
   {
     "id": 27,
@@ -745,9 +629,6 @@
       "height": 2
     },
     "description": "Grows food at scale using a controlled hydroponics system.",
-    "environmentImages": {
-      "asteroid": "assets/asteroid/hydroponics-hall.png"
-    },
     "minimumTemperature": -20,
     "maximumTemperature": 40
   },
@@ -763,28 +644,20 @@
     "crew": 1,
     "priority": 28,
     "forecastsWeather": true,
-    "description": "Estimates the timing, duration, and power impact of dust storms.",
-    "environmentImages": {
-      "asteroid": "assets/asteroid/research-lab.png"
-    }
+    "description": "Estimates the timing, duration, and power impact of dust storms."
   },
   {
     "id": 29,
     "name": "Space communications relay",
     "category": "Space logistics",
     "art": "lab",
-    "image": "assets/research-lab.png",
     "cost": {
       "alloy": 50
     },
     "power": 1,
     "priority": 22,
     "spaceRole": "relay",
-    "description": "Coordinates spacecraft launches and interbase communications.",
-    "environmentImages": {
-      "planet": "assets/research-lab.png",
-      "asteroid": "assets/asteroid/research-lab.png"
-    }
+    "description": "Coordinates spacecraft launches and interbase communications."
   },
   {
     "id": 30,
@@ -797,10 +670,7 @@
     "power": 3,
     "priority": 26,
     "spaceRole": "assembly",
-    "description": "Builds configured spacecraft while the yard and cargo facilities operate.",
-    "environmentImages": {
-      "asteroid": "assets/asteroid/space-launch-site.png"
-    }
+    "description": "Builds configured spacecraft while the yard and cargo facilities operate."
   },
   {
     "id": 31,
@@ -813,17 +683,13 @@
     "power": 1,
     "priority": 23,
     "spaceRole": "terminal",
-    "description": "Loads and receives spacecraft cargo on a solid surface.",
-    "environmentImages": {
-      "asteroid": "assets/asteroid/refinery.png"
-    }
+    "description": "Loads and receives spacecraft cargo on a solid surface."
   },
   {
     "id": 32,
     "name": "Orbital dock",
     "category": "Space logistics",
     "art": "habitat",
-    "image": "assets/habitat.png",
     "cost": {
       "alloy": 60
     },
@@ -831,10 +697,6 @@
     "priority": 23,
     "spaceRole": "dock",
     "description": "Loads and receives spacecraft cargo in orbit.",
-    "environmentImages": {
-      "planet": "assets/habitat.png",
-      "asteroid": "assets/asteroid/habitat.png"
-    },
     "minimumTemperature": -35,
     "maximumTemperature": 45
   },
