@@ -9,9 +9,7 @@ let catalog,tiles,scene,request=0;
 
 function available(building,kind) {
   if(kind==="mars") return building.spaceRole!=="dock";
-  return !building.deposit && !Object.keys(building.effects || {}).length && building.art!=="wind" &&
-    (building.art!=="launch" || building.spaceRole==="assembly") &&
-    building.spaceRole!=="terminal" && !building.forecastsWeather;
+  return Artwork.hasOrbitStructure(building.id);
 }
 
 function fillChoices() {

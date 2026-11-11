@@ -1,2 +1,3 @@
-Put transparent building PNG files here and set the building image field to assets/your-file.png.
-The game fits each sprite to a 96x100 canvas, centered horizontally and aligned to its bottom edge.
+Default building sprites are in planet-buildings.png, planets-structures.png,
+and orbit-structures.png. Shared resource icons are named resource-<id>.png.
+For galaxy-specific artwork, see "Replace a building's graphics" in the project README.

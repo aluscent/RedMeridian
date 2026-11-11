@@ -43,6 +43,7 @@ sealed record ColonySite(string Id, string Name, string Kind, int Width, int See
         (Kind == "orbit"
             ? building.Deposit is null && building.Effects.Count == 0 && building.Art != "wind" &&
                 (building.Art != "launch" || building.SpaceRole == "assembly") &&
+                (restoring || building.Id != 25) && // Core drilling is a surface facility.
                 building.SpaceRole != "terminal"
             : building.SpaceRole != "dock" && (building.Deposit is null || Deposits?.Contains(building.Deposit) != false));
 }
