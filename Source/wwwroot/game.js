@@ -10,6 +10,11 @@ const waterNames=["Land","Frozen ocean","Liquid ocean","Dry seabed"];
 let widths, heights, owners, mapSite, mapWorldRevision=-1;
 const environmentSprites=new Map();
 let spriteEnvironment;
+const statusResources=[
+  {id:"power-margin",name:"Power margin",symbol:"⚡"},
+  {id:"battery",name:"Battery",symbol:"▣"},
+  {id:"colonists",name:"Colonists",symbol:"♟"}
+];
 
 function makeStats(name,icon) {
   const el = document.createElement("details");
@@ -929,10 +934,11 @@ $("file").onchange=async event=>{
 async function useEnvironmentSprites(site) {
   const env=Artwork.environment(site.kind), key=site.galaxy+"/"+env;
   if(key===spriteEnvironment) return;
+  const resources=[...catalog.materials,...statusResources];
   if(!environmentSprites.has(key)) environmentSprites.set(key,(async()=>{
     const [sprites,icons]=await Promise.all([
       Promise.all(catalog.buildings.map(building=>Isometric.loadBuilding(building,site.kind,site.galaxy))),
-      Promise.all(catalog.materials.map(material=>Artwork.sprite(site.galaxy,env,"resource",material.id)))
+      Promise.all(resources.map(resource=>Artwork.sprite(site.galaxy,env,"resource",resource.id)))
     ]);
     return {sprites,masks:spriteMasks(sprites),icons};
   })());
@@ -943,7 +949,7 @@ async function useEnvironmentSprites(site) {
   spriteEnvironment=key;
   Array.from($("builds").children).forEach((button,i)=>button.firstElementChild.src=sprites[i].toDataURL());
   icons.forEach((icon,i)=>{
-    if(!icon) {stats[i][4].textContent=catalog.materials[i].symbol;return;}
+    if(!icon) {stats[i][4].textContent=resources[i].symbol;return;}
     const img=document.createElement("img");
     img.alt="";
     img.src=icon instanceof HTMLCanvasElement ? icon.toDataURL() : icon.src;
@@ -966,8 +972,7 @@ async function initialize() {
     if(!response.ok) throw new Error("Catalog unavailable");
     catalog=await response.json();
     const icons={ore:"◆",water:"◈",food:"✿",alloy:"▰",research:"⚗",silicon:"◇",titanium:"⬡",brine:"≋",uranium:"☢",propellant:"↑"};
-    stats=[...catalog.materials.map(m=>[m.name,icons[m.id] ?? m.symbol]),
-      ["Power margin","⚡"],["Battery","▣"],["Colonists","♟"]].map(([name,icon])=>makeStats(name,icon));
+    stats=[...catalog.materials,...statusResources].map(resource=>makeStats(resource.name,icons[resource.id] ?? resource.symbol));
     metrics=catalog.world.metrics.map(makeMetric);
     techCards=catalog.research.map(t=>{
       const card=document.createElement("div");

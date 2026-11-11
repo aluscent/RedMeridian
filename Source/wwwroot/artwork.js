@@ -1,7 +1,8 @@
 "use strict";
 
 const Artwork=(() => {
-  const resources=["water","ore","food","alloy","research","silicon","titanium","brine","uranium","propellant"];
+  const resources=["water","ore","food","alloy","research","silicon","titanium","brine","uranium","propellant",
+    "power-margin","battery","colonists"];
   const manifestCache=new Map(), atlasCache=new Map();
   const buildingSheets={
     planet:{file:"planets-structures",columns:4,rows:3,ids:[4,27,13,15,23,24,25,26,33,28,31,30]},

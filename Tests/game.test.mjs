@@ -34,7 +34,8 @@ test("both editions include the building sheets, separate resource icons, and te
     ]) {
       assert.deepEqual(await pngDimensions(edition, `assets/${file}.png`), dimensions);
     }
-    for (const id of ["water", "ore", "food", "alloy", "research", "silicon", "titanium", "brine", "uranium", "propellant"]) {
+    for (const id of ["water", "ore", "food", "alloy", "research", "silicon", "titanium", "brine", "uranium", "propellant",
+      "power-margin", "battery", "colonists"]) {
       assert.deepEqual(await pngDimensions(edition, `assets/resource-${id}.png`), [84, 84], id);
     }
     assert.deepEqual(await pngDimensions(edition, "assets/martian-ground.png"), [784, 50]);
