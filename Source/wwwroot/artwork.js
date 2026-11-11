@@ -9,13 +9,15 @@ const Artwork=(() => {
   };
   const safe=value=>typeof value==="string" && /^[a-z0-9-]+$/.test(value);
   const environment=kind=>kind==="orbit" ? "orbit" : "planet";
+  const hasPlanetStructure=id=>buildingSheets.planet.ids.includes(id);
 
   function cell(kind,key) {
     if(kind==="resource") {
       const index=resources.indexOf(key);
       return index<0 ? -1 : 27+index;
     }
-    return key<=27 ? key-1 : key===33 ? 6 : key<=32 ? key+9 : -1;
+    if(!Number.isInteger(key) || key<1 || key>33) return -1;
+    return key<=27 ? key-1 : key===33 ? 6 : key+9;
   }
 
   async function manifest(galaxy) {
@@ -50,6 +52,7 @@ const Artwork=(() => {
     const atlas=await atlasCache.get(file);
     if(!atlas) return null;
     const w=atlas.naturalWidth/columns,h=atlas.naturalHeight/rows;
+    if(!Number.isInteger(w) || !Number.isInteger(h) || index>=columns*rows) return null;
     const tile=Object.assign(document.createElement("canvas"),{width:w,height:h});
     const g=tile.getContext("2d",{willReadFrequently:trim});
     g.drawImage(atlas,index%columns*w,Math.floor(index/columns)*h,w,h,0,0,w,h);
@@ -59,7 +62,7 @@ const Artwork=(() => {
     if(clean) removeAtlasFragments(imageData);
     let left=width,top=height,right=0,bottom=0;
     for(let y=0;y<height;y++) for(let x=0;x<width;x++) {
-      if(pixels[(y*width+x)*4+3]<96) continue;
+      if(pixels[(y*width+x)*4+3]<(clean ? 96 : 1)) continue;
       left=Math.min(left,x);right=Math.max(right,x);
       top=Math.min(top,y);bottom=Math.max(bottom,y);
     }
@@ -92,16 +95,12 @@ const Artwork=(() => {
   }
 
   async function defaultSprite(env,index,kind,key) {
-    if(env==="orbit" && kind==="building" && key===25) {
-      const drill=await image("assets/refresh/orbit-core-drill.png");
-      if(drill) return drill;
-    }
     const sheet=buildingSheets[env], dedicated=kind==="building" ? sheet.ids.indexOf(key) : -1;
     if(dedicated>=0) {
       const sprite=await atlasSprite(env+"-structures",dedicated,sheet.columns,sheet.rows,true);
       if(sprite) return sprite;
     }
-    return atlasSprite(env,index,7,6,kind==="building",kind==="building");
+    return atlasSprite(env,index,7,6,kind==="building",env==="planet" && kind==="building");
   }
 
   async function sprite(galaxy,env,kind,key) {
@@ -109,6 +108,6 @@ const Artwork=(() => {
       (environment,index)=>defaultSprite(environment,index,kind,key));
   }
 
-  return {environment,cell,override,resolve,sprite};
+  return {environment,hasPlanetStructure,cell,override,resolve,sprite};
 })();
 if(typeof module!=="undefined") module.exports=Artwork;
