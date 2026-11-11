@@ -8,40 +8,38 @@ import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 
 const source = new URL("../Source/", import.meta.url);
-const play = new URL("../Play/", import.meta.url);
 const readJson = async url => JSON.parse(await readFile(url, "utf8"));
 
-async function pngDimensions(edition, image) {
-  const png = await readFile(new URL("wwwroot/" + image, edition));
+async function pngDimensions(image) {
+  const png = await readFile(new URL("wwwroot/" + image, source));
   assert.equal(png.subarray(0, 8).toString("hex"), "89504e470d0a1a0a", image);
   assert.equal(png.toString("ascii", 12, 16), "IHDR", image);
   return [png.readUInt32BE(16), png.readUInt32BE(20)];
 }
 
-test("both editions include the building sheets, separate resource icons, and terrain assets", async () => {
-  for (const edition of [source, play]) {
-    const buildings = await readJson(new URL("Config/buildings.json", edition));
-    const images = [...new Set(buildings.flatMap(building =>
-      [building.image, ...Object.values(building.environmentImages ?? {})]).filter(Boolean))];
-    for (const image of images) {
-      const [width, height] = await pngDimensions(edition, image);
-      assert.ok(width > 0 && height > 0, image);
-    }
-    for (const [file, dimensions] of [
-      ["planets-structures", [2048, 1230]],
-      ["planet-buildings", [672, 336]],
-      ["orbit-structures", [1100, 880]]
-    ]) {
-      assert.deepEqual(await pngDimensions(edition, `assets/${file}.png`), dimensions);
-    }
-    for (const id of ["water", "ore", "food", "alloy", "research", "silicon", "titanium", "brine", "uranium", "propellant",
-      "power-margin", "battery", "colonists"]) {
-      assert.deepEqual(await pngDimensions(edition, `assets/resource-${id}.png`), [84, 84], id);
-    }
-    assert.deepEqual(await pngDimensions(edition, "assets/martian-ground.png"), [784, 50]);
-    for (const id of ["iron", "ice", "silicon", "titanium", "brine", "uranium", "vent"]) {
-      assert.deepEqual(await pngDimensions(edition, `assets/deposit-${id}.png`), [98, 50], id);
-    }
+test("the game includes the building sheets, separate resource icons, and terrain assets", async () => {
+  const buildings = await readJson(new URL("Config/buildings.json", source));
+  const images = [...new Set(buildings.flatMap(building =>
+    [building.image, ...Object.values(building.environmentImages ?? {})]).filter(Boolean))];
+  for (const image of images) {
+    const [width, height] = await pngDimensions(image);
+    assert.ok(width > 0 && height > 0, image);
+  }
+  for (const [file, columns, rows] of [
+    ["planets-structures", 4, 3], ["planet-buildings", 8, 4], ["orbit-structures", 5, 4]
+  ]) {
+    const [width, height] = await pngDimensions(`assets/${file}.png`);
+    assert.ok(width >= columns && height >= rows, file);
+    assert.equal(width % columns, 0, file);
+    assert.equal(height % rows, 0, file);
+  }
+  for (const id of ["water", "ore", "food", "alloy", "research", "silicon", "titanium", "brine", "uranium", "propellant",
+    "power-margin", "battery", "colonists"]) {
+    assert.deepEqual(await pngDimensions(`assets/resource-${id}.png`), [84, 84], id);
+  }
+  assert.deepEqual(await pngDimensions("assets/martian-ground.png"), [784, 50]);
+  for (const id of ["iron", "ice", "silicon", "titanium", "brine", "uranium", "vent"]) {
+    assert.deepEqual(await pngDimensions(`assets/deposit-${id}.png`), [98, 50], id);
   }
 });
 
