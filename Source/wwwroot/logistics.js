@@ -113,7 +113,7 @@ function updateExploration(telescope,index) {
     Math.ceil(survey.ticksLeft/24)+" sols remaining"+(online?"":" (paused)");
   else if(!online) status+=" · Requires power and crew";
   else if(!telescope.systems.available && !telescope.galaxies.available) status+=" · No undiscovered targets in range";
-  if(level<3) status+=" · Galaxy surveys require level 3";
+  if(level<3) status+=" · Galaxy surveys require level 3 or higher";
   setText($("explorationStatus"),status);
   for(const [id,option,galaxy] of [["surveySystems",telescope.systems,false],["surveyGalaxies",telescope.galaxies,true]]) {
     const button=$(id);

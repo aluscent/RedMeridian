@@ -725,7 +725,8 @@
     "cost": { "alloy": 80, "silicon": 25 },
     "upgrades": [
       { "multiplier": 2, "cost": { "alloy": 120, "silicon": 50, "research": 700 }, "extraPower": 2 },
-      { "multiplier": 3, "cost": { "alloy": 180, "titanium": 65, "research": 1000 }, "extraPower": 4 }
+      { "multiplier": 3, "cost": { "alloy": 180, "titanium": 65, "research": 1000 }, "extraPower": 4 },
+      { "multiplier": 4, "cost": { "alloy": 300, "titanium": 120, "silicon": 75, "research": 1000 }, "extraPower": 6 }
     ],
     "description": "Surveys nearby star systems from orbit. Each upgrade increases its observable range thirtyfold."
   },

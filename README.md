@@ -70,7 +70,7 @@ stations keep their saved layouts.
 Activate **Orbital optics**, then build and power a **Space Telescope** at an
 orbital base. Inspect it and select **Explore**. A star-system survey costs
 300 RP and takes eight operating sols. The telescope's range rises from
-600 to 18,000 to 540,000 UoD across its three levels. At level 3 a galaxy
+600 to 18,000 to 540,000 to 16,200,000 UoD across its four levels. From level 3, a galaxy
 survey costs 2,000 RP and takes 30 operating sols. Surveys pause whenever the
 telescope loses power or crew. Discovering a galaxy reveals its primary
 system. To survey other systems there, establish an orbital telescope in

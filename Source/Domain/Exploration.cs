@@ -20,7 +20,9 @@ sealed partial class SpaceProgram
     const int GalaxySurveySols = 30;
     const int SystemSurveyCost = 300;
     const int GalaxySurveyCost = 2000;
-    static readonly int[] TelescopeRanges = [0, 600, 18_000, 540_000];
+    const int GalaxySurveyLevel = 3;
+    static readonly int[] TelescopeRanges = [0, 600, 18_000, 540_000, 16_200_000];
+    public static int MaxTelescopeLevel => TelescopeRanges.Length - 1;
     readonly HashSet<string> discovered = new() { StarChart.HomeSystem };
     readonly Dictionary<(string Base, int Index),Exploration> explorations = new();
 
@@ -51,7 +53,7 @@ sealed partial class SpaceProgram
         return new(level, TelescopeRanges[level], colony.TelescopeOnline(index),
             active is null ? null : new(active.Galaxy,active.TicksLeft),
             new(SystemSurveySols,SystemSurveyCost,SurveyTarget(colony,level,false) is not null),
-            new(GalaxySurveySols,GalaxySurveyCost,level == 3 && SurveyTarget(colony,level,true) is not null));
+            new(GalaxySurveySols,GalaxySurveyCost,level >= GalaxySurveyLevel && SurveyTarget(colony,level,true) is not null));
     }
 
     public void StartSurvey(Colony colony, int tile, bool galaxy)
@@ -61,8 +63,8 @@ sealed partial class SpaceProgram
         var key = (colony.Site.Id,index);
         if (!colony.TelescopeOnline(index) || explorations.ContainsKey(key))
             throw new InvalidOperationException("Select an operating telescope with no survey in progress.");
-        if (galaxy && level != 3)
-            throw new InvalidOperationException("Galaxy surveys require a level 3 telescope.");
+        if (galaxy && level < GalaxySurveyLevel)
+            throw new InvalidOperationException($"Galaxy surveys require a level {GalaxySurveyLevel} or higher telescope.");
         string target = SurveyTarget(colony,level,galaxy)
             ?? throw new InvalidOperationException("No undiscovered targets are in range.");
         colony.Withdraw(new() { [rules.World.ResearchMaterial] = galaxy ? GalaxySurveyCost : SystemSurveyCost });
@@ -116,7 +118,7 @@ sealed partial class SpaceProgram
             var origin = StarChart.System(colony.Site.System);
             var target = StarChart.System(survey.Target);
             if (level == 0 || StarChart.Distance(origin.X,origin.Y,target.X,target.Y) > TelescopeRanges[level] ||
-                (survey.Galaxy ? level != 3 || KnownGalaxy(target.Galaxy) || target.Id != target.Galaxy + "-primary"
+                (survey.Galaxy ? level < GalaxySurveyLevel || KnownGalaxy(target.Galaxy) || target.Id != target.Galaxy + "-primary"
                     : target.Galaxy != origin.Galaxy) ||
                 !explorations.TryAdd((survey.Base,survey.Index),survey))
                 throw new InvalidOperationException("Invalid telescope or survey target in save.");

@@ -175,7 +175,7 @@ sealed class GameRules
                 (b.Research is null || technologies.ContainsKey(b.Research)) &&
                 new[] { b.Power,b.Generation,b.StormGeneration ?? 0,b.Crew,b.Beds,b.ColonistsPerHour,b.Storage,b.ChargeRate,b.DischargeRate }
                     .All(value => value is >= 0 and <= 1000), $"Invalid building definition for ID {b.Id} ({b.Name}).");
-            Require(Surface.Fits(0,b.Footprint) && b.Upgrades.Length <= 2 &&
+            Require(Surface.Fits(0,b.Footprint) && b.Upgrades.Length <= (b.SpaceRole == "telescope" ? SpaceProgram.MaxTelescopeLevel - 1 : 2) &&
                 (b.Upgrades.Length == 0 || b.Deposit is not null && b.Outputs.Count > 0 || b.SpaceRole == "telescope") &&
                 b.Upgrades.All(u => u.Multiplier is >= 2 and <= 10 && Amounts(u.Cost,materialIds) &&
                     u.ExtraPower is >= 0 and <= 1000 && u.ExtraCrew is >= 0 and <= 1000),

@@ -794,7 +794,8 @@ function updateInfo(info) {
   $("upgradeBuilding").hidden=!info.upgrade;
   if(info.upgrade) {
     $("upgradeBuilding").textContent="Upgrade · "+(formatAmounts(info.upgrade.cost)||"Free");
-    $("upgradeBuilding").title=info.upgrade.multiplier+"× base yield · +"+info.upgrade.extraPower+" power · +"+info.upgrade.extraCrew+" crew";
+    const benefit=recipe.spaceRole==="telescope" ? "30× observation range" : info.upgrade.multiplier+"× base yield";
+    $("upgradeBuilding").title=benefit+" · +"+info.upgrade.extraPower+" power · +"+info.upgrade.extraCrew+" crew";
     $("upgradeBuilding").onclick=()=>command("upgrade",{index:info.index});
   }
   box.hidden=false;

@@ -313,7 +313,7 @@ void TelescopeDiscovery()
     program.Dispatch(program.Mars,1,orbitId,null);
     for (int i = 0; i < 6; i++) program.Step();
     var orbit = program.Base(orbitId);
-    orbit.Receive(new() { ["research"] = 6000, ["alloy"] = 500, ["silicon"] = 100, ["titanium"] = 65 });
+    orbit.Receive(new() { ["research"] = 7000, ["alloy"] = 500, ["silicon"] = 100, ["titanium"] = 65 });
     orbit.ActivateResearch("survey");
     orbit.ActivateResearch("orbital-optics");
     orbit.Build(center-1,1);
@@ -345,10 +345,21 @@ void TelescopeDiscovery()
     before = orbit.Stock("research");
     program.StartSurvey(orbit,center+1,true);
     Equal(before - 2000,orbit.Stock("research"));
+    orbit.Receive(new() { ["alloy"] = 300, ["titanium"] = 120, ["silicon"] = 75 });
+    orbit.Upgrade(center+1);
+    program = SpaceProgram.Restore(rules,program.Export());
+    orbit = program.Base(orbitId);
+    var upgraded = program.InspectTelescope(orbit,center+1)!;
+    Equal(4,upgraded.Level);
+    Equal(540_000 * 30,upgraded.Range);
+    Equal(30 * 24,upgraded.Survey!.TicksLeft);
+    Reject(() => orbit.Upgrade(center+1));
     for (int i = 0; i < 30 * 24 - 1; i++) program.Step();
     Equal(1,program.Export().Space!.Discovered!.Length);
     program.Step();
     Equal(true,program.Export().Space!.Discovered!.Contains("lantern-primary"));
+    Equal(true,program.InspectTelescope(orbit,center+1)!.Galaxies.Available);
+    program.StartSurvey(orbit,center+1,true);
 }
 
 void IntergalacticTravel()
