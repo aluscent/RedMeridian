@@ -58,7 +58,6 @@ static class StarChart
             };
         });
 
-    public static StarSystem System(string id) => Systems.Single(system => system.Id == id);
     public static int Distance(int x, int y, int otherX, int otherY)
     {
         double dx = x - otherX, dy = y - otherY;

@@ -1,7 +1,7 @@
 namespace RedMeridian.Domain;
 
 sealed record SpaceSave(Dictionary<string,SaveData> Bases, Spacecraft[] Ships, CargoRoute[]? Routes = null,
-    string[]? Discovered = null, Exploration[]? Surveys = null);
+    string[]? Discovered = null, Exploration[]? Surveys = null, UniverseSeed? Universe = null);
 sealed record Spacecraft(int Id, string Location, string? Destination = null, long ArrivalTick = 0,
     Dictionary<string,long>? Cargo = null, bool Founding = false, string Type = GameRules.LegacyShipType);
 sealed record AssemblyOrder(int Index, string Type, int TicksLeft);
@@ -73,17 +73,28 @@ sealed partial class Colony
     };
 }
 
-sealed partial class SpaceProgram(GameRules rules, Colony mars)
+sealed partial class SpaceProgram(GameRules rules, Colony mars, UniverseCatalog? catalog = null)
 {
     public const int FoundingAlloy = 24;
     const int MaxShips = 32;
     readonly Dictionary<string,Colony> bases = new() { [ColonySite.Mars.Id] = mars };
     readonly List<Spacecraft> ships = new();
     readonly Dictionary<int,CargoRoute> routes = new();
+    readonly UniverseCatalog universe = catalog ?? UniverseCatalog.Legacy;
     public Colony Mars => mars;
     public string[] VisitedGalaxies => bases.Values.Select(colony => colony.Site.Galaxy).Distinct().ToArray();
     public bool MaterialAvailable(string id) => rules.Materials.Any(material => material.Id == id &&
         (material.Galaxy is null || bases.Values.Any(colony => colony.Site.Galaxy == material.Galaxy)));
+
+    public static SpaceProgram StartCampaign(GameRules rules, MapSettings? map)
+    {
+        map = (map ?? new MapSettings((int)Random.Shared.NextInt64(int.MinValue,(long)int.MaxValue+1),8)) with { DensityPercent = true };
+        var universe = UniverseCatalog.Restore(new(map.Seed));
+        var landing = rules.NewSite(universe.Sites.Single(site => site.Id == ColonySite.Mars.Id));
+        var colony = new Colony(rules,map: map,site: landing);
+        universe.ValidateProgression(rules,colony);
+        return new(rules,colony,universe);
+    }
 
     public Colony Base(string? id) => id is not null && bases.TryGetValue(id, out var colony) ? colony :
         throw new InvalidOperationException("Select an established base.");
@@ -94,7 +105,7 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars)
     static int LaunchCost(ColonySite from,int distance) =>
         from.PlanetaryEngineering || from.Kind == "moon" ? (distance > 1 ? 8 : 4) : 0;
 
-    static (int Fuel, int Ticks) Leg(ColonySite from, ColonySite to, ShipType type)
+    (int Fuel, int Ticks) Leg(ColonySite from, ColonySite to, ShipType type)
     {
         int distance = Distance(from,to);
         int fuel = 2 + LaunchCost(from,distance) + (distance * 2 + type.FuelDistance - 1) / type.FuelDistance;
@@ -102,20 +113,21 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars)
             2 + (distance * StarChart.TicksPerSol + type.Speed - 1) / type.Speed);
     }
 
-    static int Distance(ColonySite from,ColonySite to)
+    int Distance(ColonySite from,ColonySite to)
     {
         if (from.System == to.System) return Math.Max(1,Math.Abs(from.Distance-to.Distance));
-        var origin = StarChart.System(from.System);
-        var target = StarChart.System(to.System);
+        var origin = universe.System(from.System);
+        var target = universe.System(to.System);
         return StarChart.Distance(origin.X,origin.Y,target.X,target.Y);
     }
 
     public object Summary(string? origin = null) => new
     {
         tick = mars.Tick, foundingAlloy = FoundingAlloy,
+        universe = universe.Settings,
         sites = KnownSites.Select(site => bases.TryGetValue(site.Id,out var colony) ? colony.Site : rules.NewSite(site)).ToArray(),
-        systems = StarChart.Systems.Where(system => discovered.Contains(system.Id)).ToArray(),
-        galaxies = StarChart.Galaxies.Where(galaxy => KnownGalaxy(galaxy.Id))
+        systems = universe.Systems.Where(system => discovered.Contains(system.Id)).ToArray(),
+        galaxies = universe.Galaxies.Where(galaxy => KnownGalaxy(galaxy.Id))
             .Select(galaxy => new { galaxy.Id, galaxy.Name, galaxy.X, galaxy.Y, galaxy.Diameter }).ToArray(),
         bases = bases.Values.Select(colony => colony.LogisticsSummary()).ToArray(),
         ships = ships.Select(ship => new
@@ -251,7 +263,7 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars)
         int hub = rules.Buildings.Single(b => b.SpaceRole == "hub").Id;
         var stock = rules.Materials.ToDictionary(m => m.Id, _ => 0L);
         var colony = Colony.Restore(rules, new(4, [[center, hub]], null, 2, mars.Tick, null,
-            stock, new(), Map: new(site.Seed, site.Abundance, DensityPercent: site.Id == "terminator"),
+            stock, new(), Map: new(site.Seed, site.Abundance, DensityPercent: site.Id == "terminator" || site.Generated && site.Kind != "orbit"),
             ActivatedResearch: [], LongOrbit: site.Kind == "orbit",
             PlanetBounds: site.PlanetaryEngineering ? new(site.Width,site.Height) : null), site);
         ShareGalaxyResearch(colony);
@@ -262,7 +274,7 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars)
     {
         Space = new(bases.Where(item => item.Key != ColonySite.Mars.Id)
             .ToDictionary(item => item.Key, item => item.Value.Export()), ships.ToArray(), routes.Values.ToArray(),
-            discovered.Where(id => id != StarChart.HomeSystem).Order().ToArray(), explorations.Values.ToArray())
+            discovered.Where(id => id != StarChart.HomeSystem).Order().ToArray(), explorations.Values.ToArray(),universe.Settings)
     };
 
     void ShareGalaxyResearch(Colony colony) =>
@@ -270,10 +282,14 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars)
 
     public static SpaceProgram Restore(GameRules rules, SaveData? save)
     {
-        var program = new SpaceProgram(rules, Colony.Restore(rules, save));
+        var universe = UniverseCatalog.Restore(save?.Space?.Universe);
+        var landing = universe.Settings is null ? null : universe.Sites.Single(site => site.Id == ColonySite.Mars.Id);
+        if (universe.Settings is { } seed && save?.Map?.Seed != seed.Seed)
+            throw new InvalidOperationException("The landing map does not match the campaign seed.");
+        var program = new SpaceProgram(rules, Colony.Restore(rules, save,landing),universe);
         if (save!.Space is not { } space) return program;
         if (save.Version != 4 || space.Bases is null || space.Ships is null ||
-            space.Bases.Count >= ColonySite.All.Length || space.Ships.Length > MaxShips)
+            space.Bases.Count >= universe.Sites.Length || space.Ships.Length > MaxShips)
             throw new InvalidOperationException("Invalid space program save.");
         program.RestoreDiscoveries(space.Discovered);
         foreach (var (id, colonySave) in space.Bases)

@@ -4,6 +4,7 @@ const $ = id => document.getElementById(id);
 const canvas = $("map"), ctx = canvas.getContext("2d", {alpha:false});
 const size = 1024, number = new Intl.NumberFormat();
 let catalog, stats, metrics, techCards, tileSprites, buildingSprites, masks, geology;
+let randomizeCampaignSeed;
 let surfaceSettings={seed:0,abundance:100,paint:{}}, surfaceRevision=-1;
 let climateData, climateOverlay="terrain", climateFormKey="";
 const waterNames=["Land","Frozen ocean","Liquid ocean","Dry seabed"];
@@ -93,7 +94,7 @@ function zoom(factor,x=width/2,y=height/2) {
   requestDraw();
 }
 function deposit(index) {
-  const deposit=geology.at(index,surfaceSettings);
+  const deposit=geology.at(index,surfaceSettings,mapSite ?? state.site);
   const allowed=state.site.deposits;
   return allowed===null || allowed?.includes(deposit?.id) ? deposit : null;
 }
@@ -139,7 +140,11 @@ function climateColor(cell,x,y) {
   const saturation=warmth<0 ? 23+warmth*10 : 25+warmth*12;
   return "hsla("+hue+","+saturation+"%,"+light+"%,"+(water===3 ? .75 : .58)+")";
 }
-const terrainShade=Isometric.shade;
+function terrainShade(x,y) {
+  if(!mapSite?.generated) return Isometric.shade(x,y);
+  const seed=surfaceSettings.seed;
+  return Isometric.shade(x+(seed & 65535),y+(seed>>>16));
+}
 const terrainChunks=new Map();
 const chunkSize=12, terrainBudget=48*1024*1024;
 let terrainBytes=0;
@@ -283,6 +288,7 @@ function drawHighlight(highlight) {
 }
 
 function draw() {
+  if(!canvas.width || !canvas.height) return;
   ctx.setTransform(dpr,0,0,dpr,0,0);
   if(!grid || mapWorldRevision!==state?.worldRevision) {
     ctx.fillStyle="#38251d";
@@ -449,7 +455,8 @@ function populateMenu() {
     const category=$("category").value;
     Array.from($("builds").children).forEach((button,i)=>{
       const building=catalog.buildings[i];
-      button.hidden=Boolean(category && category!==building.category || building.galaxy && building.galaxy!==state?.site.galaxy);
+      button.hidden=Boolean(category && category!==building.category || building.galaxy && building.galaxy!==state?.site.galaxy ||
+        building.research && building.research===state?.site.restrictedResearch);
     });
     if(mode>0 && category && catalog.buildings[mode-1].category!==category) chooseMode(0);
   };
@@ -515,7 +522,7 @@ function display(next) {
     number.format(next.delta[researchMaterial])+" RP net per tick");
   catalog.research.forEach((t,i)=>{
     const [card,detail,button]=techCards[i];
-    setProperty(card,"hidden",Boolean(t.galaxy && t.galaxy!==next.site.galaxy));
+    setProperty(card,"hidden",Boolean(t.galaxy && t.galaxy!==next.site.galaxy || t.id===next.site.restrictedResearch));
     const active=unlocked.has(t.id);
     const missing=t.requires.filter(id=>!unlocked.has(id));
     const points=next.stock[researchMaterial];
@@ -530,7 +537,8 @@ function display(next) {
   Array.from($("builds").children).forEach((button,i)=>{
     const building=catalog.buildings[i], id=building.research;
     const category=$("category").value;
-    setProperty(button,"hidden",Boolean(category && category!==building.category || building.galaxy && building.galaxy!==next.site.galaxy));
+    setProperty(button,"hidden",Boolean(category && category!==building.category || building.galaxy && building.galaxy!==next.site.galaxy ||
+      building.research && building.research===next.site.restrictedResearch));
     const locked=Boolean(id && !unlocked.has(id));
     setProperty(button,"disabled",!available.has(i+1));
     button.classList.toggle("locked",locked);
@@ -645,6 +653,7 @@ async function command(action,extra={}) {
       center();
     }
     if(response.ok && ["menu","save","import"].includes(action)) await refreshSaveMenu();
+    if(response.ok && action==="new") randomizeCampaignSeed();
     await refreshLogistics();
     if(selected) inspectTile(selected);
     notice(result.message,!response.ok);
@@ -1030,7 +1039,7 @@ async function initialize() {
       $("deposits").append(key);
     });
     geology=makeGeology(catalog,deposits);
-    createMapEditor(catalog,deposits,geology,map=>command("new",{map}));
+    randomizeCampaignSeed=createMapEditor(catalog,deposits,geology,map=>command("new",{map}));
     populateMenu();
     initializeLogistics();
     await refreshSaveMenu();

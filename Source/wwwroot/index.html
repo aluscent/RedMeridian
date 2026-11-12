@@ -6,11 +6,11 @@
 <title>Red Meridian — Mars Colony</title>
 <link rel="stylesheet" href="styles.css?v=exploration-2">
 <script defer src="sprites.js?v=exploration-1"></script>
-<script defer src="editor.js?v=map-11"></script>
+<script defer src="editor.js?v=universe-1"></script>
 <script defer src="logistics.js?v=exploration-3"></script>
 <script defer src="artwork.js?v=resource-icons-3"></script>
 <script defer src="isometric.js?v=2"></script>
-<script defer src="game.js?v=exploration-3"></script>
+<script defer src="game.js?v=universe-1"></script>
 </head>
 <body>
 <header>
@@ -26,7 +26,7 @@
     </div>
     <div class="start-options">
       <h3>Generate map</h3>
-      <label>World seed <input id="seed" type="number" min="-2147483648" max="2147483647" step="1" value="0" required></label>
+      <label>Campaign seed <input id="seed" type="number" min="-2147483648" max="2147483647" step="1" value="0" required></label>
       <button id="newSeed">Random seed</button>
       <label>Resource abundance <output id="abundanceValue"></output><input id="abundance" type="range" min="3" max="15" value="8"></label>
       <small>Changes deposit density. The marked landing outpost always has its starter deposits.</small>

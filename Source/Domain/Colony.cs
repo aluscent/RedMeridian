@@ -53,9 +53,9 @@ sealed partial class Colony
         Site = site ?? ColonySite.Mars;
         allowedBuildings = rules.Buildings.Where(building => Site.Allows(building)).Select(building => building.Id).ToArray();
         counts = new int[rules.Buildings.Length];
-        surface = new Surface(rules,map);
+        surface = new Surface(rules,map,Site);
         var galaxy = StarChart.Galaxies.Single(item => item.Id == Site.Galaxy);
-        var profile = rules.World.Climates?.GetValueOrDefault(Site.Id);
+        var profile = Site.Profile ?? rules.World.Climates?.GetValueOrDefault(Site.Id);
         if (profile is null && Site.Kind == "planet" && galaxy.World is not null)
             profile = new(galaxy.Temperature, 28, 25, 20, 50, 20, -5, 50);
         if (profile is not null)
@@ -254,8 +254,8 @@ sealed partial class Colony
     {
         var milestone = rules.Research.FirstOrDefault(item => item.Id == id)
             ?? throw new InvalidOperationException("Select a research milestone.");
-        if (milestone.Galaxy is not null && milestone.Galaxy != Site.Galaxy)
-            throw new InvalidOperationException("This milestone belongs to another galaxy.");
+        if (!Site.Allows(milestone))
+            throw new InvalidOperationException("This milestone is unavailable in this galaxy.");
         if (activatedResearch.Contains(milestone.Id))
             throw new InvalidOperationException("This milestone is already active.");
         if (stock[rules.World.ResearchMaterial] < milestone.Points)

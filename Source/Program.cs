@@ -198,8 +198,7 @@ sealed class ColonySession
                 switch (command.Action)
                 {
                     case "new":
-                        var map = (command.Map ?? new MapSettings(Abundance: 8)) with { DensityPercent = true };
-                        Open(new(rules, new Colony(rules,map: map,site: rules.NewSite(ColonySite.Mars))));
+                        Open(SpaceProgram.StartCampaign(rules,command.Map));
                         activeSlot = null;
                         diskVersion = 0;
                         message = "Landed on the generated map.";

@@ -1,9 +1,9 @@
 # Red Meridian — Map Edition
 
-New Mars maps have 10,000 tiles, and Venus outposts have 13,440. Adjust their
-dimensions under `planetSizes` in `Config/world.json` within the 8,000–14,000
-tile range. Existing colonies retain their saved bounds, and tester mode
-still offers the 100,000-structure stress map.
+Every new campaign starts on Mars in the Solar System and generates its own
+universe. Mars defaults to 10,000 tiles. Adjust its landing bounds under
+`planetSizes` in `Config/world.json`. Existing colonies retain their saved
+bounds, and tester mode still offers the 100,000-structure stress map.
 
 Install the .NET 8 SDK, run **Start Red Meridian.cmd**, and open
 http://127.0.0.1:5287/. Keep the server window open. Both Windows launchers
@@ -66,6 +66,19 @@ New orbital stations are 5 tiles wide and 150 tiles long. Existing orbital
 stations keep their saved layouts.
 
 ## Explore beyond the Solar System
+
+The landing planner starts with a fresh campaign seed. Enter a previous seed
+to reproduce that universe with the same generator version. The planner's
+abundance and paint controls also determine the starting Mars deposits.
+The generator varies neighboring galaxies, star systems, destinations,
+distances, climate, and regional deposits. The ten distant galaxies keep
+their specialty materials, with local availability of optional research and
+its buildings varying by campaign. The game checks the landing recipe chain
+and the discovery and travel ranges before opening a campaign.
+
+The save keeps the seed and generator version. Detailed terrain and deposit
+maps are evaluated when a colony is founded or loaded. Older saves keep the
+original fixed chart, and undiscovered destinations stay off the star map.
 
 Activate **Orbital optics**, then build and power a **Space Telescope** at an
 orbital base. Inspect it and select **Explore**. A star-system survey costs

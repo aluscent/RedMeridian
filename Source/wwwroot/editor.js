@@ -6,14 +6,21 @@ function makeGeology(catalog, deposits) {
   const fixed=new Map(catalog.world.depositOverrides.map(o=>[o.y*1024+o.x,o.deposit]));
   const byId=new Map(deposits.map(d=>[d.id,d]));
   for(const deposit of deposits) for(const bucket of deposit.buckets) buckets[bucket]=deposit;
-  function at(index,map) {
-    if(fixed.has(index)) return byId.get(fixed.get(index));
+  const regions=new WeakMap();
+  function at(index,map,site) {
+    if(site?.protectLandingDeposits!==false && fixed.has(index)) return byId.get(fixed.get(index));
     if(Object.hasOwn(map.paint || {},index)) return byId.get(map.paint[index]);
     let hash=Math.imul(index,0x9e3779b9)^map.seed;
     hash=Math.imul(hash^(hash>>>16),0x7feb352d);
     hash=(hash^(hash>>>15))>>>0;
-    if(map.densityPercent)
-      return deposits.length && hash%100<map.abundance ? deposits[Math.floor(hash/100)%deposits.length] : null;
+    if(map.densityPercent) {
+      let available=deposits;
+      if(site?.generated && Array.isArray(site.deposits)) {
+        if(!regions.has(site)) regions.set(site,site.deposits.map(id=>byId.get(id)));
+        available=regions.get(site);
+      }
+      return available.length && hash%100<map.abundance ? available[Math.floor(hash/100)%available.length] : null;
+    }
     const deposit=buckets[hash%buckets.length];
     const quotient=Math.floor(hash/buckets.length);
     const variation=quotient%100;
@@ -94,10 +101,11 @@ function createMapEditor(catalog, deposits, geology, start) {
     el("editorMode").setAttribute("aria-pressed",editing);
     preview.classList.toggle("painting",editing);
   };
-  el("newSeed").onclick=()=>{
+  function randomizeSeed() {
     seed.value=crypto.getRandomValues(new Int32Array(1))[0];
     draw();
-  };
+  }
+  el("newSeed").onclick=randomizeSeed;
   seed.oninput=draw;
   abundance.oninput=draw;
   document.querySelectorAll("[data-pan]").forEach(button=>{
@@ -142,5 +150,6 @@ function createMapEditor(catalog, deposits, geology, start) {
       el("menuNotice").textContent="Map design imported.";
     } catch(error) {el("menuNotice").textContent=error.message;}
   };
-  draw();
+  randomizeSeed();
+  return randomizeSeed;
 }

@@ -16,6 +16,8 @@ var rules = new GameRules(Path.Combine(AppContext.BaseDirectory, "Config"));
     ("Assembly pauses offline and preserves typed orders through saves", TimedAssembly),
     ("Telescope surveys spend research, pause offline, and unlock systems and galaxies on schedule", TelescopeDiscovery),
     ("Ship ranges, travel time, and galaxy research apply across discovered systems", IntergalacticTravel),
+    ("Seeded campaigns vary while respecting exploration tiers and viable landing inputs", GeneratedUniverses),
+    ("Generated discoveries, flight quotes and landed maps survive saves", GeneratedCampaignRoundTrip),
     ("Planetary engineering requires long-term investment and runs only on planets", PlanetaryEngineering),
     ("Meridian terrain has bounded slopes and rejects steep footprints", MeridianTerrain),
     ("Powered housing provides beds without workers", UnstaffedHousing),
@@ -416,6 +418,98 @@ void IntergalacticTravel()
     Equal(true,program.MaterialAvailable(sample));
     Equal(true,program.Base("cinder-outer-orbit").HasResearch(galaxy.Technology));
     Equal(false,program.Mars.HasResearch(galaxy.Technology));
+}
+
+void GeneratedUniverses()
+{
+    string Snapshot(UniverseCatalog catalog) =>
+        System.Text.Json.JsonSerializer.Serialize(new { catalog.Galaxies,catalog.Systems,catalog.Sites });
+    var first = UniverseCatalog.Restore(new(-4100));
+    Equal(Snapshot(first),Snapshot(UniverseCatalog.Restore(new(-4100))));
+    Equal(false,Snapshot(first) == Snapshot(UniverseCatalog.Restore(new(-4101))));
+    Reject(() => UniverseCatalog.Restore(new(42,100)));
+    var counts = new HashSet<int>();
+    var localWidths = new HashSet<int>();
+    var geology = new HashSet<string>();
+    foreach (int seed in Enumerable.Range(-12,25).Append(int.MinValue).Append(int.MaxValue))
+    {
+        var program = SpaceProgram.StartCampaign(rules,new(seed,3));
+        var settings = program.Export().Space!.Universe!;
+        Equal(new UniverseSeed(seed),settings);
+        Equal("sol",program.Mars.Site.System);
+        Equal("iron",program.Mars.DepositAt(511 * Colony.Size + 512));
+        var catalog = UniverseCatalog.Restore(settings);
+        counts.Add(catalog.Galaxies.Length);
+        localWidths.Add(catalog.Sites.Single(s => s.Id == "venus").Width);
+        geology.Add(string.Join(",",catalog.Sites.Single(s => s.Id == "proxima-world").Deposits!));
+        Equal(10,catalog.Galaxies.Count(g => StarChart.Distance(0,0,g.X,g.Y) > 150_000));
+        Equal(true,catalog.Galaxies.All(g => g.Diameter is >= 8_000 and <= 12_000));
+        Equal(true,catalog.Systems.GroupBy(s => s.Galaxy).All(group => group.Count() <= 20));
+        Equal(true,catalog.Sites.GroupBy(s => s.System).All(group => group.Count() <= 10));
+        Equal(true,catalog.Sites.All(site => site.Distance <= catalog.System(site.System).Diameter));
+        Equal(true,catalog.Sites.Where(s => s.Profile is not null).All(s => s.Profile!.Valid));
+    }
+    Equal(2,counts.Count);
+    Equal(true,localWidths.Count > 10);
+    Equal(true,geology.Count > 10);
+    var sameMap = SpaceProgram.StartCampaign(rules,new(0,3));
+    var cleared = new Dictionary<int,string?>();
+    var landing = sameMap.Mars.Site;
+    for (int y = landing.Top; y < landing.Top + landing.Height; y++)
+    for (int x = landing.Left; x < landing.Left + landing.Width; x++)
+    {
+        int index = y * Colony.Size + x;
+        if (rules.FixedDeposit(index) is null) cleared[index] = null;
+    }
+    Reject(() => SpaceProgram.StartCampaign(rules,new(0,3,cleared)));
+}
+
+void GeneratedCampaignRoundTrip()
+{
+    var program = SpaceProgram.StartCampaign(rules,new(1400,8));
+    var save = program.Export();
+    var catalog = UniverseCatalog.Restore(save.Space!.Universe);
+    var destination = catalog.Sites.Single(s => s.Id == "proxima-world");
+    var station = catalog.Sites.Single(s => s.Id == "mars-orbit-1");
+    int center = 511*Colony.Size+511;
+    int Building(string role) => rules.Buildings.Single(b => b.SpaceRole == role).Id;
+    save.Space!.Bases[station.Id] = save with
+    {
+        Tiles = [[center,Building("telescope")],[center+1,1]], Structures = [], PlanetBounds = null,
+        LongOrbit = true, Map = new(station.Seed,station.Abundance), Space = null
+    };
+    save.Space.Bases[station.Id].Materials!["research"] = 300;
+    save = save with { Space = save.Space with { Ships = [new(1,"mars",Type: "stellar-explorer")] } };
+    program = SpaceProgram.Restore(rules,save);
+    var mars = program.Mars;
+    mars.Receive(new() { ["alloy"] = 1000, ["propellant"] = 300 });
+    mars.Build(center - 1 - Colony.Size,Building("relay"));
+    mars.Build(center - Colony.Size,Building("terminal"));
+    program.Step();
+    Reject(() => program.Dispatch(mars,1,destination.Id,null));
+    program.StartSurvey(program.Base(station.Id),center,false);
+    for (int i = 0; i < 192; i++) program.Step();
+    Equal("proxima",program.Export().Space!.Discovered!.Single());
+    program.Dispatch(mars,1,destination.Id,new() { ["alloy"] = 120 });
+    int distance = StarChart.Distance(0,0,catalog.System("proxima").X,catalog.System("proxima").Y);
+    var flight = program.Export().Space!.Ships.Single();
+    Equal(2L + (distance*24L+959)/960,flight.ArrivalTick-mars.Tick);
+    program = SpaceProgram.Restore(rules,program.Export());
+    for (long tick = program.Mars.Tick; tick < flight.ArrivalTick; tick++) program.Step();
+    var world = program.Base(destination.Id);
+    Equal(destination.Width,world.Site.Width);
+    Equal(destination.Height,world.Site.Height);
+    Equal(destination.Seed,world.MapSettings.Seed);
+    Equal(destination.Abundance,world.MapSettings.Abundance);
+    Equal(120L,world.Stock("alloy"));
+    var terrain = world.ClimateMap();
+    var regionalDeposits = Enumerable.Range(0,world.Site.Width).Select(x => world.DepositAt(world.Site.Top*Colony.Size+world.Site.Left+x)).ToArray();
+    var reloaded = SpaceProgram.Restore(rules,program.Export());
+    var restored = reloaded.Base(destination.Id);
+    Equal(true,terrain.SequenceEqual(restored.ClimateMap()));
+    Equal(true,regionalDeposits.SequenceEqual(Enumerable.Range(0,restored.Site.Width)
+        .Select(x => restored.DepositAt(restored.Site.Top*Colony.Size+restored.Site.Left+x))));
+    Equal(new UniverseSeed(1400),reloaded.Export().Space!.Universe);
 }
 
 void PlanetaryEngineering()

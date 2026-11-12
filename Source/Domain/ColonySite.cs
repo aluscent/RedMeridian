@@ -1,7 +1,9 @@
 namespace RedMeridian.Domain;
 
 sealed record ColonySite(string Id, string Name, string Kind, int Width, int Seed, int Abundance, int Distance, int? Length = null,
-    string Galaxy = StarChart.HomeGalaxy, string System = StarChart.HomeSystem)
+    string Galaxy = StarChart.HomeGalaxy, string System = StarChart.HomeSystem,
+    bool Generated = false, string[]? RegionDeposits = null, ClimateProfile? Profile = null,
+    string? RestrictedResearch = null)
 {
     static readonly string[] AsteroidDeposits = ["iron", "titanium", "uranium"];
     static readonly string[] MoonDeposits = ["ice", "brine", "silicon"];
@@ -9,13 +11,14 @@ sealed record ColonySite(string Id, string Name, string Kind, int Width, int See
     public int Left => (Colony.Size - Width) / 2;
     public int Top => (Colony.Size - Height) / 2;
     public bool PlanetaryEngineering => Kind is "mars" or "planet";
-    public string[]? Deposits => Kind switch
+    public string[]? Deposits => RegionDeposits ?? (Kind switch
     {
         "orbit" => [],
         "asteroid" => AsteroidDeposits,
         "moon" => MoonDeposits,
         _ => null
-    };
+    });
+    public bool ProtectLandingDeposits => !Generated || Kind == "mars";
 
     public static readonly ColonySite Mars = new("mars", "Mars Landing Sector", "mars", Colony.Size, 0, 100, 0);
     public static readonly ColonySite[] All =
@@ -41,6 +44,7 @@ sealed record ColonySite(string Id, string Name, string Kind, int Width, int See
 
     public bool Allows(Building building, bool restoring = false) =>
         (building.Galaxy is null || building.Galaxy == Galaxy) &&
+        (RestrictedResearch is null || building.Research != RestrictedResearch) &&
         (building.SpaceRole != "telescope" || Kind == "orbit") &&
         (Kind == "mars" || !building.ForecastsWeather) &&
         (PlanetaryEngineering || restoring || building.Effects.Count == 0) &&
@@ -50,4 +54,7 @@ sealed record ColonySite(string Id, string Name, string Kind, int Width, int See
                 (restoring || building.Id != 25) && // Core drilling is a surface facility.
                 building.SpaceRole != "terminal"
             : building.SpaceRole != "dock" && (building.Deposit is null || Deposits?.Contains(building.Deposit) != false));
+
+    public bool Allows(Technology technology) =>
+        (technology.Galaxy is null || technology.Galaxy == Galaxy) && technology.Id != RestrictedResearch;
 }

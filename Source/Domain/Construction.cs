@@ -169,7 +169,8 @@ sealed partial class Colony
         return index;
     }
 
-    bool MatchesDeposit(int index,Building b) => b.Deposit is null || surface.DepositAt(index) == b.Deposit;
+    public string? DepositAt(int index) => surface.DepositAt(index);
+    bool MatchesDeposit(int index,Building b) => b.Deposit is null || DepositAt(index) == b.Deposit;
 
     void CheckBuild(Building b,int count)
     {
