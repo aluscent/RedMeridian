@@ -13,19 +13,21 @@ sealed class Surface
 {
     readonly int[] owner = new int[Colony.Size * Colony.Size];
     readonly GameRules rules;
+    readonly ColonySite? site;
     public MapSettings Settings { get; }
     public byte[] Widths { get; } = new byte[Colony.Size * Colony.Size];
     public byte[] Heights { get; } = new byte[Colony.Size * Colony.Size];
 
-    public Surface(GameRules rules,MapSettings? settings)
+    public Surface(GameRules rules,MapSettings? settings,ColonySite? site = null)
     {
         this.rules = rules;
+        this.site = site;
         settings ??= new();
         if ((settings.DensityPercent ? settings.Abundance is < 3 or > 15 : settings.Abundance is < 0 or > 200) ||
             settings.Paint?.Count > 16_384 ||
             settings.Paint?.Any(pair => (uint)pair.Key >= owner.Length ||
                 pair.Value is not null && !rules.World.Deposits.Any(d => d.Id == pair.Value) ||
-                rules.FixedDeposit(pair.Key) is not null) == true)
+                site?.ProtectLandingDeposits != false && rules.FixedDeposit(pair.Key) is not null) == true)
             throw new InvalidOperationException("Invalid map settings or edit to a protected landing deposit.");
         Settings = settings with { Paint = settings.Paint is null ? new() : new(settings.Paint) };
     }
@@ -33,7 +35,7 @@ sealed class Surface
     public string? DepositAt(int index)
     {
         if (Settings.Paint!.TryGetValue(index,out var deposit)) return deposit;
-        return rules.DepositAt(index,Settings.Seed,Settings.Abundance,Settings.DensityPercent);
+        return rules.DepositAt(index,Settings.Seed,Settings.Abundance,Settings.DensityPercent,site);
     }
 
     public int AnchorAt(int index) => (uint)index < owner.Length ? owner[index] - 1 : -1;

@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Red Meridian — Mars Colony</title>
-<link rel="stylesheet" href="styles.css?v=exploration-2">
+<link rel="stylesheet" href="styles.css?v=tester-1">
 <script defer src="sprites.js?v=exploration-1"></script>
-<script defer src="editor.js?v=map-11"></script>
+<script defer src="editor.js?v=universe-1"></script>
 <script defer src="logistics.js?v=exploration-3"></script>
 <script defer src="artwork.js?v=resource-icons-3"></script>
 <script defer src="isometric.js?v=2"></script>
-<script defer src="game.js?v=exploration-3"></script>
+<script defer src="game.js?v=tester-1"></script>
 </head>
 <body>
 <header>
@@ -26,7 +26,7 @@
     </div>
     <div class="start-options">
       <h3>Generate map</h3>
-      <label>World seed <input id="seed" type="number" min="-2147483648" max="2147483647" step="1" value="0" required></label>
+      <label>Campaign seed <input id="seed" type="number" min="-2147483648" max="2147483647" step="1" value="0" required></label>
       <button id="newSeed">Random seed</button>
       <label>Resource abundance <output id="abundanceValue"></output><input id="abundance" type="range" min="3" max="15" value="8"></label>
       <small>Changes deposit density. The marked landing outpost always has its starter deposits.</small>
@@ -95,11 +95,15 @@
       <details id="testerTools" class="research" hidden>
         <summary class="label">Tester tools</summary>
         <dl><dt>Canvas draw p95</dt><dd id="draw">-</dd><dt>Economy tick p95</dt><dd id="tick">-</dd><dt>Pan frame p95</dt><dd id="frames">-</dd><dt>Structures / visible</dt><dd id="count">-</dd></dl>
-        <div class="controls"><button id="stress">Load 100k stress map</button><button id="sweep" hidden>Pan test</button></div>
+        <div class="controls"><button id="stress">Load 100k stress map</button><button id="sweep" hidden>Pan test</button><button id="testerUnlockResearch" type="button">Unlock all research</button></div>
         <form id="testerGrant">
-          <label>Resource <select id="testerMaterial" required></select></label>
-          <label>Units <input id="testerAmount" type="number" min="1" max="100000" value="100" required></label>
-          <button type="submit">Grant to current base</button>
+          <fieldset>
+            <legend>Resources</legend>
+            <div class="controls"><button id="testerSelectAll" type="button">Select all</button><button id="testerClear" type="button">Clear</button></div>
+            <div id="testerMaterials"></div>
+          </fieldset>
+          <label>Units each <input id="testerAmount" type="number" min="1" max="100000" value="100" required></label>
+          <button id="testerGrantButton" type="submit" disabled>Grant to current base</button>
         </form>
         <form id="testerStep">
           <label>Ticks <input id="testerTicks" type="number" min="1" max="100" value="1" required></label>

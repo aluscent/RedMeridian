@@ -225,12 +225,14 @@ sealed class GameRules
 
     public string? FixedDeposit(int index) => depositOverrides.GetValueOrDefault(index);
 
-    public string? DepositAt(int index,int seed = 0,int abundance = 100,bool densityPercent = false)
+    public string? DepositAt(int index,int seed = 0,int abundance = 100,bool densityPercent = false,ColonySite? site = null)
     {
-        if (depositOverrides.TryGetValue(index,out string? deposit)) return deposit;
+        if (site?.ProtectLandingDeposits != false && depositOverrides.TryGetValue(index,out string? deposit)) return deposit;
         uint hash = unchecked((uint)(index * 0x9e3779b9) ^ (uint)seed);
         hash = unchecked((hash ^ (hash >> 16)) * 0x7feb352du);
         hash ^= hash >> 15;
+        if (densityPercent && site is { Generated: true, Deposits: { } region })
+            return region.Length > 0 && hash % 100 < abundance ? region[(hash / 100) % region.Length] : null;
         if (densityPercent)
             return World.Deposits.Length > 0 && hash % 100 < abundance
                 ? World.Deposits[(hash / 100) % World.Deposits.Length].Id : null;
@@ -253,7 +255,7 @@ sealed class GameRules
     public Technology Technology(string id) => technologies[id];
     public ColonySite NewSite(ColonySite site)
     {
-        if (!site.PlanetaryEngineering) return site;
+        if (!site.PlanetaryEngineering || site.Generated && site.Kind != "mars") return site;
         var dimensions = World.PlanetSizes?.GetValueOrDefault(site.Id) ?? new PlanetSize(100,100);
         return site with { Width = dimensions.Width, Length = dimensions.Height };
     }

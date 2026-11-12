@@ -65,7 +65,10 @@ progress{width:100%;height:6px;display:block;accent-color:#d18a58}
 #research small{display:block}
 #research button,#testerTools form{margin-top:8px}
 #testerTools form{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-#testerTools input{width:6em}
+#testerTools input[type="number"]{width:6em}
+#testerGrant fieldset{width:100%;min-width:0;margin:0;border:1px solid var(--line);border-radius:5px}
+#testerMaterials{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:4px 8px;margin-top:6px}
+#testerMaterials label{display:flex;align-items:center;gap:5px}
 .legend{pointer-events:auto}
 #deposits{display:grid;gap:4px;margin-top:6px}
 .legend span+span{margin:0}
