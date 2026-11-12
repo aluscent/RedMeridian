@@ -135,7 +135,7 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   assert.deepEqual(network.systems.map(system => system.id), ["sol"]);
   assert.match(await (await get("/")).text(), /game\.js/);
   const mine = catalog.buildings.find(building => building.deposit === "iron");
-  for (const name of ["planet-buildings", "planets-structures", "orbit-structures", "resource-ore"]) {
+  for (const name of ["planet-buildings", "planets-structures", "orbit-structures", "resource-ore", "space-telescope"]) {
     const image = await get(`/assets/${name}.png`);
     assert.match(image.headers.get("content-type"), /^image\/png\b/);
     await image.arrayBuffer();

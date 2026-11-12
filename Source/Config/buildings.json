@@ -718,6 +718,7 @@
     "name": "Space Telescope",
     "category": "Science",
     "art": "telescope",
+    "image": "assets/space-telescope.png",
     "spaceRole": "telescope",
     "research": "orbital-optics",
     "power": 4,
