@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Red Meridian — Mars Colony</title>
-<link rel="stylesheet" href="styles.css?v=exploration-1">
+<link rel="stylesheet" href="styles.css?v=exploration-2">
 <script defer src="sprites.js?v=exploration-1"></script>
 <script defer src="editor.js?v=map-11"></script>
-<script defer src="logistics.js?v=exploration-1"></script>
+<script defer src="logistics.js?v=exploration-2"></script>
 <script defer src="artwork.js?v=resource-icons-3"></script>
 <script defer src="isometric.js?v=2"></script>
-<script defer src="game.js?v=exploration-1"></script>
+<script defer src="game.js?v=exploration-2"></script>
 </head>
 <body>
 <header>
@@ -122,17 +122,6 @@
           <div class="logistics">
             <p>Power a communications relay, spacecraft assembly yard, and cargo terminal. Assemble a ship, choose a destination, and launch with propellant. Once it arrives, choose the new colony under View base.</p>
             <label>View base <select id="baseSelect"></select></label>
-            <div id="travelMapSlot">
-              <div id="travelMap">
-                <div class="controls">
-                  <strong id="travelMapOrigin">Star map</strong>
-                  <button id="zoomStarsIn" type="button" aria-label="Zoom star map in">+</button>
-                  <button id="zoomStarsOut" type="button" aria-label="Zoom star map out">−</button>
-                </div>
-                <canvas id="starChart" width="420" height="240" aria-label="Known planets, stars, and galaxies by distance"></canvas>
-                <small>Distance rings are logarithmic · planet ○ · star ◇ · galaxy ◉</small>
-              </div>
-            </div>
             <div class="logistics-table"><table><thead id="baseHead"></thead><tbody id="baseStock"></tbody></table></div>
             <p id="spaceFacilities"></p>
             <form id="dispatchShip">
@@ -152,7 +141,18 @@
             <h3>Fleet and incoming shipments</h3><ul id="fleet"></ul>
           </div>
             </section>
-            <section id="systemPanel" aria-label="Star map" hidden><ul id="systemMap"></ul></section>
+            <section id="systemPanel" aria-label="Star map" hidden>
+              <div id="travelMap">
+                <div class="controls">
+                  <strong id="travelMapOrigin">Star map</strong>
+                  <button id="zoomStarsIn" type="button" aria-label="Zoom star map in">+</button>
+                  <button id="zoomStarsOut" type="button" aria-label="Zoom star map out">−</button>
+                </div>
+                <canvas id="starChart" width="550" height="290" aria-label="Known planets, stars, and galaxies by distance"></canvas>
+                <small>Planet ○ · star system ◇ · galaxy ◉</small>
+              </div>
+              <ul id="systemMap"></ul>
+            </section>
           </aside>
         </div>
         <output id="climateReadout" class="bar" hidden></output>

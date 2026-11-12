@@ -275,10 +275,12 @@ sealed partial class Colony
     public bool HasResearch(string? id) => id is null || activatedResearch.Contains(id);
 
     public object Status(int revision,bool stress,bool paused,int speed,bool started = true,bool hasSave = false,
-        int worldRevision = 0,int inspect = -1,bool developerMode = false,TelescopeStatus? telescope = null) => new
+        int worldRevision = 0,int inspect = -1,bool developerMode = false,TelescopeStatus? telescope = null,
+        string[]? visitedGalaxies = null) => new
     {
         revision, stress, paused, speed, tick, started, hasSave, worldRevision, developerMode, site = Site, allowedBuildings,
-        inspected = Inspect(inspect), telescope, stock = new Dictionary<string,long>(stock),
+        inspected = Inspect(inspect), telescope, visitedGalaxies = visitedGalaxies ?? [Site.Galaxy],
+        stock = new Dictionary<string,long>(stock),
         delta = new Dictionary<string,long>(delta), population, housing,
         supply = generated, demand, used, crewUsed, crewCapacity = population * rules.World.CrewPerColonist,
         batteryCharge = power.Charge, batteryCapacity = power.Capacity, batteryAvailable = power.Available,

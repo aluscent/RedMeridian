@@ -76,12 +76,13 @@ telescope loses power or crew. Discovering a galaxy reveals its primary
 system. To survey other systems there, establish an orbital telescope in
 that galaxy.
 
-The zoomable star map in **Space travel** displays known planets, systems,
-and galaxies on logarithmic distance rings. Select a destination to see the
+The zoomable **Star Map** tab labels known planets, systems, and galaxies.
+Select a destination in **Fleet & launch** to see the
 ship-specific fuel and time estimate. Stellar Explorers reach other systems
 in the Milky Way, Galaxy Clippers reach neighboring galaxies, and Deep Galaxy
 Arks can reach the ten distant galaxies. Those galaxies have their own worlds,
-survey milestones, and specialty materials.
+survey milestones, and specialty materials. Each specialty material appears
+in inventories and cargo controls after the first spacecraft arrives in its galaxy.
 
 ## Activate research milestones
 

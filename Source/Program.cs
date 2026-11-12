@@ -79,7 +79,8 @@ sealed class ColonySession
     Colony Current => stress ?? program.Base(selectedBase);
     object State(int inspect = -1) => Current.Status(revision,stress is not null,paused,speed,
         started,File.Exists(defaultSave),worldRevision,inspect,developerMode,
-        stress is null && inspect >= 0 ? program.InspectTelescope(Current,inspect) : null);
+        stress is null && inspect >= 0 ? program.InspectTelescope(Current,inspect) : null,
+        program.VisitedGalaxies);
 
     string SavePath(string? slot)
     {
@@ -275,7 +276,7 @@ sealed class ColonySession
                         RequireDeveloperMode();
                         if (command.Revision != revision) throw new InvalidOperationException("Base changed. Try again.");
                         if (command.Material is not { } material || command.Amount is < 1 or > 100_000 ||
-                            !rules.Materials.Any(item => item.Id == material))
+                            !program.MaterialAvailable(material))
                             throw new InvalidOperationException("Select a resource and an amount from 1 to 100,000.");
                         var grant = new Dictionary<string,long> { [material] = command.Amount };
                         if (!Current.CanReceive(grant)) throw new InvalidOperationException("Grant exceeds storage capacity.");

@@ -403,6 +403,13 @@ function setArea(enabled) {
 function formatAmounts(amounts) {
   return Object.entries(amounts).map(([id,value])=>value+" "+catalog.materials.find(m=>m.id===id).symbol).join(" + ");
 }
+function materialAvailable(material) {
+  return !material.galaxy || Boolean(state?.visitedGalaxies.includes(material.galaxy));
+}
+
+function availableMaterials() {
+  return catalog.materials.filter(materialAvailable);
+}
 function buildingDetail(recipe) {
   const input=formatAmounts(recipe.inputs), output=formatAmounts(recipe.outputs);
   const effects=Object.entries(recipe.effects).map(([id,value])=>{
@@ -426,6 +433,7 @@ function populateMenu() {
   catalog.buildings.forEach((recipe,i)=>{
     const button=document.createElement("button");
     button.className="build";
+    button.hidden=Boolean(recipe.galaxy);
     button.innerHTML='<img alt=""><span><strong></strong><small></small></span><span class="cost"></span>';
     button.children[0].src=buildingSprites[i].toDataURL();
     button.querySelector("strong").textContent=recipe.name;
@@ -485,12 +493,15 @@ function display(next) {
   );
   entries.forEach(([value,detail,delta],i)=>{
     const material=catalog.materials[i];
-    setProperty(stats[i][0].parentElement,"hidden",Boolean(material?.galaxy && material.galaxy!==next.site.galaxy && !next.stock[material.id]));
+    setProperty(stats[i][0].parentElement,"hidden",Boolean(material && !materialAvailable(material)));
     setText(stats[i][1],value);
     setText(stats[i][2],detail);
     setAttribute(stats[i][0],"aria-label",stats[i][3]+" "+value);
     setProperty(stats[i][2],"className",delta>0?"positive":delta<0?"negative":"");
   });
+  const materials=availableMaterials();
+  setOptions($("testerMaterial"),materials.map(material=>[material.id,material.name]));
+  syncLogisticsMaterials(materials);
   catalog.world.metrics.forEach((metric,i)=>{
     const value=next.planet[metric.id];
     setText(metrics[i][1],(value/10).toFixed(1)+metric.unit+" / "+metric.target/10+metric.unit);
@@ -989,10 +1000,12 @@ async function initialize() {
     catalog=await response.json();
     const icons={ore:"◆",water:"◈",food:"✿",alloy:"▰",research:"⚗",silicon:"◇",titanium:"⬡",brine:"≋",uranium:"☢",propellant:"↑"};
     stats=[...catalog.materials,...statusResources].map(resource=>makeStats(resource.name,icons[resource.id] ?? resource.symbol));
+    catalog.materials.forEach((material,i)=>stats[i][0].parentElement.hidden=!materialAvailable(material));
     metrics=catalog.world.metrics.map(makeMetric);
     techCards=catalog.research.map(t=>{
       const card=document.createElement("div");
       card.textContent=t.name;
+      card.hidden=Boolean(t.galaxy);
       const detail=document.createElement("small"), button=document.createElement("button");
       button.type="button";
       button.textContent="Activate";
@@ -1002,8 +1015,6 @@ async function initialize() {
       $("research").append(card);
       return [card,detail,button];
     });
-    for(const material of catalog.materials)
-      $("testerMaterial").add(new Option(material.name,material.id));
     for(const type of catalog.shipTypes) $("shipType").add(new Option(type.name,type.id));
     const deposits=catalog.world.deposits.map((d,index)=>({...d,index:index+1}));
     [buildingSprites,tileSprites]=await Promise.all([

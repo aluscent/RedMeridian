@@ -1,6 +1,6 @@
 "use strict";
 
-let logistics, cargoInputs;
+let logistics, cargoInputs=new Map(), logisticsMaterialsKey;
 let starZoom=0;
 const baseRows=new Map(), fleetRows=new Map();
 
@@ -21,27 +21,40 @@ function setOptions(select, entries) {
   if(entries.some(([value])=>String(value)===previous)) select.value=previous;
 }
 
-function initializeLogistics() {
-  cargoInputs=new Map();
+function syncLogisticsMaterials(materials) {
+  const key=materials.map(material=>material.id).join("/");
+  if(key===logisticsMaterialsKey) return;
+  logisticsMaterialsKey=key;
   const header=document.createElement("tr");
-  for(const name of ["Base",...catalog.materials.map(material=>material.name),"Life support runway"]) {
+  for(const name of ["Base",...materials.map(material=>material.name),"Life support runway"]) {
     const cell=document.createElement("th");
     cell.textContent=name;
     header.append(cell);
   }
-  $("baseHead").append(header);
-  for(const material of catalog.materials.filter(m=>m.id!==catalog.world.researchMaterial)) {
+  $("baseHead").replaceChildren(header);
+  $("baseStock").replaceChildren();
+  baseRows.clear();
+  $("fleet").replaceChildren();
+  fleetRows.clear();
+  const previous=cargoInputs, physical=materials.filter(m=>m.id!==catalog.world.researchMaterial);
+  cargoInputs=new Map();
+  $("cargoInputs").replaceChildren();
+  for(const material of physical) {
     const label=document.createElement("label"), input=document.createElement("input");
     input.type="number";
     input.min=0;
     input.max=Math.max(...catalog.shipTypes.map(type=>type.payload));
     input.placeholder="0";
+    input.value=previous.get(material.id)?.value ?? "";
     input.addEventListener("input", renderFlightQuote);
     label.append(material.name+" ",input);
     $("cargoInputs").append(label);
     cargoInputs.set(material.id,input);
-    $("routeMaterial").add(new Option(material.name,material.id));
   }
+  setOptions($("routeMaterial"),physical.map(material=>[material.id,material.name]));
+}
+
+function initializeLogistics() {
   $("baseSelect").onchange=event=>command("select-base",{base:event.target.value});
   $("zoomStarsIn").onclick=()=>changeStarZoom(1);
   $("zoomStarsOut").onclick=()=>changeStarZoom(-1);
@@ -118,31 +131,25 @@ function changeStarZoom(delta) {
 function drawStarChart() {
   const origin=logistics?.systems.find(system=>system.id===state.site.system);
   if(!origin) return;
-  const canvas=$("starChart"), g=canvas.getContext("2d");
-  const x=canvas.width/2, y=canvas.height/2, radius=y-16;
+  const canvas=$("starChart");
+  if(canvas.width!==canvas.clientWidth) canvas.width=canvas.clientWidth;
+  const g=canvas.getContext("2d");
+  const x=canvas.width/2, y=canvas.height/2, radius=Math.min(y-34,x*.42);
   const radial=distance=>Math.log10(1+distance)*radius/(6-starZoom);
   g.clearRect(0,0,canvas.width,canvas.height);
-  g.font="10px system-ui";
-  g.textAlign="left";
   g.textBaseline="middle";
   for(const distance of [1,10,100,1000,10000,100000]) {
     const r=radial(distance);
     if(r>radius) break;
     g.strokeStyle="#42536a";
     g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.stroke();
-    g.fillStyle="#9caabd";
-    g.fillText(number.format(distance),x+3,y-r-5);
   }
   const marks=[];
   function mark(name,distance,angle,color,glyph) {
     const r=radial(distance);
     if(r>radius) return;
-    g.fillStyle=color;
-    g.textAlign="center";
-    g.font=(glyph==="◉"?"15":"12")+"px system-ui";
     const px=x+Math.cos(angle)*r, py=y+Math.sin(angle)*r;
-    g.fillText(glyph,px,py);
-    marks.push({px,py,label:name+" · "+number.format(Math.ceil(distance))+" UoD"});
+    marks.push({px,py,name,color,glyph});
   }
   const planets=logistics.sites.filter(site=>site.system===origin.id && site.planetaryEngineering);
   planets.forEach((site,i)=>mark(site.name,Math.max(site.distance,.6),i*2.4,"#80e4db","○"));
@@ -151,11 +158,33 @@ function drawStarChart() {
   for(const galaxy of logistics.galaxies.filter(galaxy=>galaxy.id!==origin.galaxy))
     mark(galaxy.name,Math.hypot(galaxy.x-origin.x,galaxy.y-origin.y),Math.atan2(galaxy.y-origin.y,galaxy.x-origin.x),"#d3adff","◉");
   mark(origin.name,0,0,"#ffe2a2","✦");
-  canvas.onmousemove=event=>{
-    const px=event.offsetX*canvas.width/canvas.clientWidth, py=event.offsetY*canvas.height/canvas.clientHeight;
-    const match=marks.filter(mark=>Math.hypot(mark.px-px,mark.py-py)<8);
-    setProperty(canvas,"title",match.map(mark=>mark.label).join("\n"));
-  };
+  marks.sort((a,b)=>a.px-b.px);
+  const middle=Math.ceil(marks.length/2);
+  for(const [side,labels] of [[-1,marks.slice(0,middle)],[1,marks.slice(middle)]]) {
+    labels.sort((a,b)=>a.py-b.py);
+    const labelX=x+side*(radius+10), gap=Math.min(22,(canvas.height-28)/Math.max(1,labels.length-1));
+    let previousY=14-gap;
+    g.font="13px system-ui";
+    g.textAlign=side<0 ? "right" : "left";
+    labels.forEach((object,index)=>{
+      const limit=canvas.height-14-(labels.length-index-1)*gap;
+      const labelY=Math.min(limit,Math.max(object.py,previousY+gap));
+      previousY=labelY;
+      g.strokeStyle="#55677c";
+      g.beginPath();
+      g.moveTo(object.px,object.py);
+      g.lineTo(labelX-side*5,labelY);
+      g.stroke();
+      g.fillStyle=object.color;
+      g.fillText(object.name,labelX,labelY,x-radius-16);
+    });
+  }
+  for(const {px,py,color,glyph} of marks) {
+    g.fillStyle=color;
+    g.textAlign="center";
+    g.font="14px system-ui";
+    g.fillText(glyph,px,py);
+  }
   setText($("travelMapOrigin"),origin.name);
   setProperty($("zoomStarsIn"),"disabled",starZoom===5);
   setProperty($("zoomStarsOut"),"disabled",starZoom===0);
@@ -189,10 +218,8 @@ async function refreshLogistics() {
     return Math.ceil(Math.hypot(target.x-origin.x,target.y-origin.y));
   };
   const destinationLabel=site=>site.name+" · "+systems.get(site.system).name+" · "+number.format(distance(site))+" UoD";
-  const mapSlot=$("systemPanel").hidden ? $("travelMapSlot") : $("systemPanel");
-  if($("travelMap").parentElement!==mapSlot) mapSlot.prepend($("travelMap"));
-  drawStarChart();
   if(!$("systemPanel").hidden) {
+    drawStarChart();
     const known=[...logistics.sites].sort((a,b)=>distance(a)-distance(b));
     setList($("systemMap"),[...known.map(destinationLabel),...logistics.galaxies.filter(g=>g.id!==origin.galaxy).map(g=>
       g.name+" · "+number.format(Math.ceil(Math.hypot(g.x-origin.x,g.y-origin.y)))+" UoD")]);
@@ -201,6 +228,8 @@ async function refreshLogistics() {
   const bases=logistics.bases;
   const local=bases.find(base=>base.id===state.site.id);
   if(!local) return;
+  const materials=availableMaterials();
+  const available=new Set(materials.map(material=>material.id));
   setOptions($("baseSelect"),bases.map(base=>[base.id,names.get(base.id)]));
   setProperty($("baseSelect"),"value",state.site.id);
   setOptions($("destination"),logistics.sites.filter(site=>site.id!==local.id)
@@ -210,7 +239,7 @@ async function refreshLogistics() {
 
   pruneRows(baseRows,bases.map(base=>base.id));
   for(const base of bases) {
-    const values=[names.get(base.id),...catalog.materials.map(material=>{
+    const values=[names.get(base.id),...materials.map(material=>{
       const delta=base.delta[material.id];
       return number.format(base.stock[material.id])+" ("+(delta>=0?"+":"")+delta+"/tick)";
     }),Object.entries(base.reserves).map(([id,ticks])=>id+": "+(ticks===null?"stable":ticks+" ticks")).join(", ")];
@@ -244,13 +273,15 @@ async function refreshLogistics() {
       fleetRows.set(ship.id,item);
       $("fleet").append(item);
     }
+    const cargo=Object.fromEntries(Object.entries(ship.cargo || {}).filter(([id])=>available.has(id)));
     const flight=ship.destination
       ? names.get(ship.location)+" → "+names.get(ship.destination)+" · "+
         (ship.waiting?"Waiting for an operating dock or storage space":"ETA "+Math.max(0,ship.arrivalTick-logistics.tick)+" ticks")+
-        " · "+(formatAmounts(ship.cargo || {}) || "empty")
+        " · "+(formatAmounts(cargo) || "empty")
       : "Docked at "+names.get(ship.location);
     const route=logistics.routes.find(route=>route.ship===ship.id);
-    const description=route?" · Recurring "+route.material+" · "+names.get(route.source)+" → "+names.get(route.destination)+" ":"";
+    const description=route?" · Recurring route"+(available.has(route.material)?" ("+route.material+")":"")+
+      " · "+names.get(route.source)+" → "+names.get(route.destination)+" ":"";
     setText(item.firstElementChild,catalog.shipTypes.find(type=>type.id===ship.type).name+" #"+ship.id+" · "+flight+description);
     setProperty(item.lastElementChild,"hidden",!route);
   }

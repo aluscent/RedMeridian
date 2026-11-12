@@ -364,16 +364,23 @@ void IntergalacticTravel()
     program = SpaceProgram.Restore(rules,save);
     program.Step();
     const string target = "cinder-primary-world";
+    const string sample = "cinder-sample";
+    Equal(false,program.MaterialAvailable(sample));
+    Equal(false,program.VisitedGalaxies.Contains("cinder"));
     long fuel = program.Mars.Stock("propellant");
     Reject(() => program.Dispatch(program.Mars,1,target,null));
     Equal(fuel,program.Mars.Stock("propellant"));
     program.Mars.Receive(new() { ["propellant"] = 2000, ["silicon"] = 30 });
+    Reject(() => program.Dispatch(program.Mars,2,target,new() { [sample] = 1 }));
     program.Dispatch(program.Mars,2,target,new() { ["alloy"] = 150, ["silicon"] = 30 });
+    Equal(false,program.MaterialAvailable(sample));
     var flight = program.Export().Space!.Ships[1];
     Equal(true, flight.ArrivalTick - program.Mars.Tick > 600);
     Equal(true, program.Mars.Stock("propellant") < fuel + 2000);
     for (long tick = program.Mars.Tick; tick < flight.ArrivalTick; tick++) program.Step();
     var world = program.Base(target);
+    Equal(true,program.MaterialAvailable(sample));
+    Equal(false,program.MaterialAvailable("glacier-sample"));
     Equal(1,world.Export().Tiles!.Length);
     Equal(150L,world.Stock("alloy"));
     Equal(true,world.CanDock);
@@ -395,6 +402,7 @@ void IntergalacticTravel()
         { Tiles = [[center,rules.Buildings.Single(b => b.SpaceRole == "hub").Id]],
             Climate = null, PlanetBounds = null, LongOrbit = true, ActivatedResearch = [] });
     program = SpaceProgram.Restore(rules,nextSave);
+    Equal(true,program.MaterialAvailable(sample));
     Equal(true,program.Base("cinder-outer-orbit").HasResearch(galaxy.Technology));
     Equal(false,program.Mars.HasResearch(galaxy.Technology));
 }

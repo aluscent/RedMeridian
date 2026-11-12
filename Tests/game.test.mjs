@@ -143,6 +143,7 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
 
   const initial = await (await get("/api/state")).json();
   assert.equal(initial.started, false);
+  assert.deepEqual(initial.visitedGalaxies, ["milky-way"]);
   const site = catalog.landingSite;
   const first = site.top * 1024 + site.left;
   for (const abundance of [2, 16]) await command("new", { map: { abundance } }, 400);
@@ -161,6 +162,7 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   assert.deepEqual(await (await get("/api/surface")).json(), map);
   await command("new", { map });
   const { state } = await command("pause");
+  await command("tester-grant", { revision: state.revision, material: "cinder-sample", amount: 1 }, 400);
   await command("tester-grant", { revision: state.revision, material: "alloy", amount: 100 });
   assert.deepEqual(await (await get("/api/surface")).json(), map);
   await command("build", { index: first, type: mine.id, revision: state.revision - 1 }, 400);

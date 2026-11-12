@@ -81,6 +81,9 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars)
     readonly List<Spacecraft> ships = new();
     readonly Dictionary<int,CargoRoute> routes = new();
     public Colony Mars => mars;
+    public string[] VisitedGalaxies => bases.Values.Select(colony => colony.Site.Galaxy).Distinct().ToArray();
+    public bool MaterialAvailable(string id) => rules.Materials.Any(material => material.Id == id &&
+        (material.Galaxy is null || bases.Values.Any(colony => colony.Site.Galaxy == material.Galaxy)));
 
     public Colony Base(string? id) => id is not null && bases.TryGetValue(id, out var colony) ? colony :
         throw new InvalidOperationException("Select an established base.");
@@ -156,6 +159,8 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars)
         if (Distance(origin.Site,target) > type.Range)
             throw new InvalidOperationException("This destination exceeds the spacecraft's travel range.");
         ValidateCargo(cargo,type.Payload);
+        if (cargo.Keys.Any(id => !MaterialAvailable(id)))
+            throw new InvalidOperationException("Cargo contains an unavailable material.");
         bool founding = !bases.ContainsKey(target.Id);
         if (founding && ships.Any(other => other.Founding && other.Destination == target.Id))
             throw new InvalidOperationException("A founding mission is already on its way.");
@@ -178,7 +183,7 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars)
             throw new InvalidOperationException($"Cargo must contain at most {payload} units of physical materials.");
     }
 
-    public void SetRoute(CargoRoute route)
+    public void SetRoute(CargoRoute route, bool restoring = false)
     {
         if (route.Ship <= 0 || route.Ship > ships.Count || route.Source is null || route.Destination is null ||
             route.Source == route.Destination ||
@@ -187,6 +192,8 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars)
             route.Material == rules.World.ResearchMaterial || !rules.Materials.Any(m => m.Id == route.Material))
             throw new InvalidOperationException("Select a ship, two established bases, a material, and valid stock thresholds.");
         var ship = ships[route.Ship - 1];
+        if (!restoring && !MaterialAvailable(route.Material))
+            throw new InvalidOperationException("Select an available route material.");
         if (Distance(bases[route.Source].Site,bases[route.Destination].Site) > rules.ShipType(ship.Type).Range)
             throw new InvalidOperationException("This route exceeds the spacecraft's travel range.");
         if ((ship.Destination ?? ship.Location) != route.Source && (ship.Destination ?? ship.Location) != route.Destination)
@@ -305,7 +312,7 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars)
         {
             if (route is null || program.routes.ContainsKey(route.Ship))
                 throw new InvalidOperationException("Invalid recurring route save.");
-            program.SetRoute(route);
+            program.SetRoute(route,restoring: true);
         }
         return program;
     }
