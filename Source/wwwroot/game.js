@@ -507,7 +507,7 @@ function display(next) {
     setProperty(stats[i][2],"className",delta>0?"positive":delta<0?"negative":"");
   });
   const materials=availableMaterials();
-  setOptions($("testerMaterial"),materials.map(material=>[material.id,material.name]));
+  if(next.developerMode) syncTesterMaterials(materials);
   syncLogisticsMaterials(materials);
   catalog.world.metrics.forEach((metric,i)=>{
     const value=next.planet[metric.id];
@@ -922,9 +922,35 @@ $("openLogistics").onclick=()=>openPanel("controlPanel","logistics");
 $("closeConstruction").onclick=()=>{openPanel();$("openConstruction").focus();};
 $("closeControl").onclick=()=>{openPanel();$("openControl").focus();};
 for(const button of controlTabs) button.onclick=()=>openPanel("controlPanel",button.dataset.control);
+function syncTesterMaterials(materials) {
+  const list=$("testerMaterials"), current=[...list.querySelectorAll("input")];
+  if(current.length===materials.length && current.every((input,i)=>input.value===materials[i].id)) return;
+  const previous=new Map(current.map(input=>[input.value,input.checked]));
+  list.replaceChildren(...materials.map(material=>{
+    const label=document.createElement("label");
+    const input=Object.assign(document.createElement("input"),{
+      type:"checkbox",value:material.id,checked:previous.get(material.id) ?? true
+    });
+    label.append(input,material.name);
+    return label;
+  }));
+  updateTesterGrant();
+}
+function updateTesterGrant() {
+  $("testerGrantButton").disabled=!$("testerMaterials").querySelector("input:checked");
+}
+function selectTesterMaterials(checked) {
+  for(const input of $("testerMaterials").querySelectorAll("input")) input.checked=checked;
+  updateTesterGrant();
+}
+$("testerMaterials").onchange=updateTesterGrant;
+$("testerSelectAll").onclick=()=>selectTesterMaterials(true);
+$("testerClear").onclick=()=>selectTesterMaterials(false);
+$("testerUnlockResearch").onclick=()=>command("tester-unlock-research");
 $("testerGrant").onsubmit=event=>{
   event.preventDefault();
-  command("tester-grant",{material:$("testerMaterial").value,amount:Number($("testerAmount").value)});
+  const materials=[...$("testerMaterials").querySelectorAll("input:checked")].map(input=>input.value);
+  if(materials.length) command("tester-grant",{materials,amount:Number($("testerAmount").value)});
 };
 $("testerStep").onsubmit=event=>{
   event.preventDefault();

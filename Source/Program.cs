@@ -44,7 +44,7 @@ record Command(string? Action, int Index = -1, int Type = 0, int Revision = -1, 
     int EndIndex = -1, MapSettings? Map = null, string? Base = null, int Ship = 0,
     Dictionary<string,long>? Cargo = null, CargoRoute? Route = null, string? Technology = null,
     string? Material = null, int Amount = 0, string? ShipType = null, ClimateSettings? Climate = null, string? SaveSlot = null,
-    bool GalaxySurvey = false);
+    bool GalaxySurvey = false, string[]? Materials = null);
 
 
 sealed class ColonySession
@@ -274,13 +274,25 @@ sealed class ColonySession
                     case "tester-grant":
                         RequireDeveloperMode();
                         if (command.Revision != revision) throw new InvalidOperationException("Base changed. Try again.");
-                        if (command.Material is not { } material || command.Amount is < 1 or > 100_000 ||
-                            !program.MaterialAvailable(material))
-                            throw new InvalidOperationException("Select a resource and an amount from 1 to 100,000.");
-                        var grant = new Dictionary<string,long> { [material] = command.Amount };
+                        string[] materials = command.Materials ?? (command.Material is { } material ? [material] : []);
+                        if (command.Materials is not null && command.Material is not null ||
+                            materials.Length == 0 || materials.Length > rules.Materials.Length ||
+                            materials.Distinct().Count() != materials.Length || command.Amount is < 1 or > 100_000 ||
+                            materials.Any(id => !program.MaterialAvailable(id)))
+                            throw new InvalidOperationException("Select available resources and enter an amount from 1 to 100,000.");
+                        var grant = materials.ToDictionary(id => id, _ => (long)command.Amount);
                         if (!Current.CanReceive(grant)) throw new InvalidOperationException("Grant exceeds storage capacity.");
                         Current.Receive(grant);
-                        message = $"Added {command.Amount} {material} to this base.";
+                        message = materials.Length == 1 ? $"Added {command.Amount:N0} units of {materials[0]}." :
+                            $"Added {command.Amount:N0} units each to {materials.Length} selected resources.";
+                        break;
+                    case "tester-unlock-research":
+                        RequireDeveloperMode();
+                        if (command.Revision != revision) throw new InvalidOperationException("Base changed. Try again.");
+                        int unlocked = Current.UnlockAllResearch();
+                        message = unlocked == 0 ? "All available research is already active." : $"Unlocked {unlocked} research milestones in this galaxy.";
+                        edits = [];
+                        revision++;
                         break;
                     case "tester-step":
                         RequireDeveloperMode();

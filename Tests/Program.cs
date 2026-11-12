@@ -781,6 +781,8 @@ void TesterCommands()
     Equal<int?>(200, Code(normal.Apply(new("new"))));
     Equal<int?>(400, Code(normal.Apply(new("stress"))));
     Equal<int?>(400, Code(normal.Apply(new("tester-grant", Revision: 1, Material: "alloy", Amount: 100))));
+    Equal<int?>(400, Code(normal.Apply(new("tester-grant", Revision: 1, Materials: ["alloy","water"], Amount: 100))));
+    Equal<int?>(400, Code(normal.Apply(new("tester-unlock-research", Revision: 1))));
     Equal<int?>(400, Code(normal.Apply(new("tester-step", Amount: 2))));
 
     var developer = new ConfigurationBuilder()
@@ -788,11 +790,15 @@ void TesterCommands()
     var tester = new ColonySession(rules, developer);
     Equal<int?>(200, Code(tester.Apply(new("new"))));
     Equal<int?>(200, Code(tester.Apply(new("tester-grant", Revision: 1, Material: "alloy", Amount: 100))));
+    Equal<int?>(400, Code(tester.Apply(new("tester-unlock-research", Revision: 0))));
+    Equal<int?>(200, Code(tester.Apply(new("tester-unlock-research", Revision: 1))));
     Equal<int?>(200, Code(tester.Apply(new("tester-step", Amount: 2))));
     using var status = System.Text.Json.JsonSerializer.SerializeToDocument(tester.Read(-1));
     Equal(true, status.RootElement.GetProperty("developerMode").GetBoolean());
     Equal(true, status.RootElement.GetProperty("paused").GetBoolean());
     Equal(2L, status.RootElement.GetProperty("tick").GetInt64());
+    var unlocked = status.RootElement.GetProperty("unlocked").EnumerateArray().Select(item => item.GetString()).ToHashSet();
+    Equal(true, unlocked.SetEquals(rules.Research.Where(ColonySite.Mars.Allows).Select(tech => tech.Id)));
     Equal<int?>(200, Code(tester.Apply(new("stress"))));
 }
 

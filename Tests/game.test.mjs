@@ -176,8 +176,14 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   assert.deepEqual(reloadedCampaign.legs, campaign.legs);
   await command("new", { map });
   const { state } = await command("pause");
-  await command("tester-grant", { revision: state.revision, material: "cinder-sample", amount: 1 }, 400);
-  await command("tester-grant", { revision: state.revision, material: "alloy", amount: 100 });
+  const invalidGrant = await command("tester-grant", { revision: state.revision, materials: ["alloy", "cinder-sample"], amount: 100 }, 400);
+  assert.deepEqual(invalidGrant.state.stock, state.stock);
+  await command("tester-grant", { revision: state.revision, materials: ["alloy", "alloy"], amount: 100 }, 400);
+  await command("tester-grant", { revision: state.revision, materials: [], amount: 100 }, 400);
+  const grant = await command("tester-grant", { revision: state.revision, materials: ["alloy", "water"], amount: 100 });
+  assert.equal(grant.state.stock.alloy, state.stock.alloy + 100);
+  assert.equal(grant.state.stock.water, state.stock.water + 100);
+  assert.equal(grant.state.stock.food, state.stock.food);
   assert.deepEqual(await (await get("/api/surface")).json(), map);
   await command("build", { index: first, type: mine.id, revision: state.revision - 1 }, 400);
 
@@ -279,4 +285,12 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   assert.equal(flight.distance, Math.ceil(Math.hypot(proxima.x, proxima.y)));
   assert.ok(!flight.flights.some(quote => quote.type === "cargo-shuttle"));
   assert.ok(flight.flights.some(quote => quote.type === "stellar-explorer" && quote.fuel > 0 && quote.ticks > 0));
+  const beforeUnlock = await (await get("/api/state")).json();
+  const unlocked = await command("tester-unlock-research", { revision: beforeUnlock.revision });
+  assert.deepEqual(new Set(unlocked.state.unlocked),
+    new Set(catalog.research.filter(tech => !tech.galaxy).map(tech => tech.id)));
+  assert.equal(unlocked.state.stock.research, beforeUnlock.stock.research);
+  await command("save");
+  const loaded = await command("load");
+  assert.deepEqual(new Set(loaded.state.unlocked), new Set(unlocked.state.unlocked));
 });

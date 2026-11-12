@@ -115,8 +115,10 @@ Keep IDs stable because spacecraft and assembly orders reference them in saves.
 ## Tester mode
 
 Run **Start Red Meridian Tester.cmd** and open http://127.0.0.1:5288/.
-The **Tester tools** section contains resource grants, manual tick advancement,
-the 100,000-structure stress map, and its pan test. Tester mode defaults to
+Open **Construction → Tester tools** to grant one amount to each checked
+resource or unlock every available research milestone in the current galaxy.
+The section also offers manual tick advancement, the 100,000-structure
+stress map, and its pan test. Tester mode defaults to
 `colony.test.json` in the save directory, while normal play uses `colony.json`.
 
 ## Generate, edit, or load a map

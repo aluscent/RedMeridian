@@ -272,6 +272,20 @@ sealed partial class Colony
         colony.activatedResearch = activatedResearch;
     }
 
+    public int UnlockAllResearch()
+    {
+        int before = activatedResearch.Count;
+        int previous;
+        do
+        {
+            previous = activatedResearch.Count;
+            activatedResearch.UnionWith(rules.Research
+                .Where(tech => Site.Allows(tech) && tech.Requires.All(activatedResearch.Contains))
+                .Select(tech => tech.Id));
+        } while (activatedResearch.Count > previous);
+        return activatedResearch.Count - before;
+    }
+
     public bool HasResearch(string? id) => id is null || activatedResearch.Contains(id);
 
     public object Status(int revision,bool stress,bool paused,int speed,bool started = true,bool hasSave = false,
