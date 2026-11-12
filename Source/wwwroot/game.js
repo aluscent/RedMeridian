@@ -403,6 +403,13 @@ function setArea(enabled) {
 function formatAmounts(amounts) {
   return Object.entries(amounts).map(([id,value])=>value+" "+catalog.materials.find(m=>m.id===id).symbol).join(" + ");
 }
+function materialAvailable(material) {
+  return !material.galaxy || Boolean(state?.visitedGalaxies.includes(material.galaxy));
+}
+
+function availableMaterials() {
+  return catalog.materials.filter(materialAvailable);
+}
 function buildingDetail(recipe) {
   const input=formatAmounts(recipe.inputs), output=formatAmounts(recipe.outputs);
   const effects=Object.entries(recipe.effects).map(([id,value])=>{
@@ -426,6 +433,7 @@ function populateMenu() {
   catalog.buildings.forEach((recipe,i)=>{
     const button=document.createElement("button");
     button.className="build";
+    button.hidden=Boolean(recipe.galaxy);
     button.innerHTML='<img alt=""><span><strong></strong><small></small></span><span class="cost"></span>';
     button.children[0].src=buildingSprites[i].toDataURL();
     button.querySelector("strong").textContent=recipe.name;
@@ -440,7 +448,8 @@ function populateMenu() {
   $("category").onchange=()=>{
     const category=$("category").value;
     Array.from($("builds").children).forEach((button,i)=>{
-      button.hidden=Boolean(category && category!==catalog.buildings[i].category);
+      const building=catalog.buildings[i];
+      button.hidden=Boolean(category && category!==building.category || building.galaxy && building.galaxy!==state?.site.galaxy);
     });
     if(mode>0 && category && catalog.buildings[mode-1].category!==category) chooseMode(0);
   };
@@ -483,11 +492,16 @@ function display(next) {
     [next.population+" / "+next.housing,next.crewUsed+" / "+next.crewCapacity+" crew slots"]
   );
   entries.forEach(([value,detail,delta],i)=>{
+    const material=catalog.materials[i];
+    setProperty(stats[i][0].parentElement,"hidden",Boolean(material && !materialAvailable(material)));
     setText(stats[i][1],value);
     setText(stats[i][2],detail);
     setAttribute(stats[i][0],"aria-label",stats[i][3]+" "+value);
     setProperty(stats[i][2],"className",delta>0?"positive":delta<0?"negative":"");
   });
+  const materials=availableMaterials();
+  setOptions($("testerMaterial"),materials.map(material=>[material.id,material.name]));
+  syncLogisticsMaterials(materials);
   catalog.world.metrics.forEach((metric,i)=>{
     const value=next.planet[metric.id];
     setText(metrics[i][1],(value/10).toFixed(1)+metric.unit+" / "+metric.target/10+metric.unit);
@@ -501,6 +515,7 @@ function display(next) {
     number.format(next.delta[researchMaterial])+" RP net per tick");
   catalog.research.forEach((t,i)=>{
     const [card,detail,button]=techCards[i];
+    setProperty(card,"hidden",Boolean(t.galaxy && t.galaxy!==next.site.galaxy));
     const active=unlocked.has(t.id);
     const missing=t.requires.filter(id=>!unlocked.has(id));
     const points=next.stock[researchMaterial];
@@ -513,7 +528,9 @@ function display(next) {
       (requirements.length?" · Activate first: "+requirements.join(", "):""));
   });
   Array.from($("builds").children).forEach((button,i)=>{
-    const id=catalog.buildings[i].research;
+    const building=catalog.buildings[i], id=building.research;
+    const category=$("category").value;
+    setProperty(button,"hidden",Boolean(category && category!==building.category || building.galaxy && building.galaxy!==next.site.galaxy));
     const locked=Boolean(id && !unlocked.has(id));
     setProperty(button,"disabled",!available.has(i+1));
     button.classList.toggle("locked",locked);
@@ -621,6 +638,7 @@ async function command(action,extra={}) {
       frameTimes.length=drawTimes.length=0;
       $("frames").textContent="—";
       selected=cursor=anchor=undefined;
+      $("explorationDialog").close();
       $("buildingInfo").hidden=true;
       $("inspect").textContent="Select a tile to inspect it.";
       chooseMode(0);
@@ -711,9 +729,15 @@ function placeInfo() {
 function updateInfo(info) {
   const box=$("buildingInfo");
   const cell=selected && inside(selected) ? mapOffset(...selected) : -1;
-  if(!info || !state.started || mode!==0 || owners?.[cell]!==info.index+1) {box.hidden=true;return;}
+  if(!info || !state.started || mode!==0 || owners?.[cell]!==info.index+1) {
+    box.hidden=true;
+    $("explorationDialog").close();
+    return;
+  }
   const recipe=catalog.buildings[info.type-1];
   $("infoDescription").textContent=recipe.description;
+  $("openExploration").hidden=!state.telescope;
+  if(state.telescope) updateExploration(state.telescope,info.index);
   const assembly=$("shipAssembly");
   assembly.hidden=recipe.spaceRole!=="assembly" || state.stress;
   if(!assembly.hidden) {
@@ -721,10 +745,13 @@ function updateInfo(info) {
     const render=()=>{
       const type=catalog.shipTypes.find(item=>item.id===(info.assembly?.type ?? select.value));
       select.disabled=Boolean(info.assembly);
-      $("beginAssembly").disabled=Boolean(info.assembly) || !info.assemblyReady || !type;
+      const locked=type?.research && !state.unlocked.includes(type.research);
+      $("beginAssembly").disabled=Boolean(info.assembly) || !info.assemblyReady || !type || Boolean(locked);
       $("assemblyStatus").textContent=info.assembly
         ? type.name+" · "+info.assembly.ticksLeft+" ticks remaining"+(info.assemblyReady?"":" · Paused")
-        : type ? formatAmounts(type.cost)+" · "+type.buildTicks+" ticks · "+type.payload+" cargo · "+type.fuelPercent+"% fuel"+
+        : type ? formatAmounts(type.cost)+" · "+type.buildTicks+" ticks · "+type.payload+" cargo · "+
+          number.format(type.range)+" UoD range · "+number.format(type.speed)+" UoD/sol"+
+          (locked?" · Requires "+catalog.research.find(tech=>tech.id===type.research).name:"")+
           (info.assemblyReady?"":" · Requires an operating yard and cargo facility") : "";
     };
     select.onchange=render;
@@ -767,7 +794,8 @@ function updateInfo(info) {
   $("upgradeBuilding").hidden=!info.upgrade;
   if(info.upgrade) {
     $("upgradeBuilding").textContent="Upgrade · "+(formatAmounts(info.upgrade.cost)||"Free");
-    $("upgradeBuilding").title=info.upgrade.multiplier+"× base yield · +"+info.upgrade.extraPower+" power · +"+info.upgrade.extraCrew+" crew";
+    const benefit=recipe.spaceRole==="telescope" ? "30× observation range" : info.upgrade.multiplier+"× base yield";
+    $("upgradeBuilding").title=benefit+" · +"+info.upgrade.extraPower+" power · +"+info.upgrade.extraCrew+" crew";
     $("upgradeBuilding").onclick=()=>command("upgrade",{index:info.index});
   }
   box.hidden=false;
@@ -973,10 +1001,12 @@ async function initialize() {
     catalog=await response.json();
     const icons={ore:"◆",water:"◈",food:"✿",alloy:"▰",research:"⚗",silicon:"◇",titanium:"⬡",brine:"≋",uranium:"☢",propellant:"↑"};
     stats=[...catalog.materials,...statusResources].map(resource=>makeStats(resource.name,icons[resource.id] ?? resource.symbol));
+    catalog.materials.forEach((material,i)=>stats[i][0].parentElement.hidden=!materialAvailable(material));
     metrics=catalog.world.metrics.map(makeMetric);
     techCards=catalog.research.map(t=>{
       const card=document.createElement("div");
       card.textContent=t.name;
+      card.hidden=Boolean(t.galaxy);
       const detail=document.createElement("small"), button=document.createElement("button");
       button.type="button";
       button.textContent="Activate";
@@ -986,8 +1016,6 @@ async function initialize() {
       $("research").append(card);
       return [card,detail,button];
     });
-    for(const material of catalog.materials)
-      $("testerMaterial").add(new Option(material.name,material.id));
     for(const type of catalog.shipTypes) $("shipType").add(new Option(type.name,type.id));
     const deposits=catalog.world.deposits.map((d,index)=>({...d,index:index+1}));
     [buildingSprites,tileSprites]=await Promise.all([

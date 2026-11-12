@@ -73,5 +73,29 @@
       "habitats"
     ],
     "legacyPoints": 150
+  },
+  {
+    "id": "orbital-optics",
+    "name": "Orbital optics",
+    "points": 450,
+    "requires": ["survey"]
+  },
+  {
+    "id": "stellar-navigation",
+    "name": "Stellar navigation",
+    "points": 1200,
+    "requires": ["orbital-optics"]
+  },
+  {
+    "id": "intergalactic-drive",
+    "name": "Intergalactic propulsion",
+    "points": 4000,
+    "requires": ["stellar-navigation"]
+  },
+  {
+    "id": "deep-galaxy-drive",
+    "name": "Deep-galaxy propulsion",
+    "points": 9000,
+    "requires": ["intergalactic-drive", "fission"]
   }
 ]

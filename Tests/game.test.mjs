@@ -132,6 +132,7 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   assert.deepEqual(network.bases.map(base => base.id), ["mars"]);
   assert.ok(network.sites.some(site => site.kind === "orbit" && site.width === 5 && site.height === 150));
   assert.ok(network.sites.some(site => site.kind === "moon" && site.width === 316 && site.height === 316));
+  assert.deepEqual(network.systems.map(system => system.id), ["sol"]);
   assert.match(await (await get("/")).text(), /game\.js/);
   const mine = catalog.buildings.find(building => building.deposit === "iron");
   for (const name of ["planet-buildings", "planets-structures", "orbit-structures", "resource-ore"]) {
@@ -142,6 +143,7 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
 
   const initial = await (await get("/api/state")).json();
   assert.equal(initial.started, false);
+  assert.deepEqual(initial.visitedGalaxies, ["milky-way"]);
   const site = catalog.landingSite;
   const first = site.top * 1024 + site.left;
   for (const abundance of [2, 16]) await command("new", { map: { abundance } }, 400);
@@ -160,6 +162,7 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   assert.deepEqual(await (await get("/api/surface")).json(), map);
   await command("new", { map });
   const { state } = await command("pause");
+  await command("tester-grant", { revision: state.revision, material: "cinder-sample", amount: 1 }, 400);
   await command("tester-grant", { revision: state.revision, material: "alloy", amount: 100 });
   assert.deepEqual(await (await get("/api/surface")).json(), map);
   await command("build", { index: first, type: mine.id, revision: state.revision - 1 }, 400);
@@ -201,8 +204,11 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   const last = (orbit.top + orbit.height - 1) * 1024 + orbit.left + orbit.width - 1;
   const solar = catalog.buildings.find(building => building.art === "solar");
   const drill = catalog.buildings.find(building => building.art === "drill");
-  const remote = { ...save, tiles: [[last, solar.id], [orbitStart, drill.id]],
-    structures: [{ index: orbitStart, width: 2, height: 2 }], longOrbit: true,
+  const telescope = catalog.buildings.find(building => building.spaceRole === "telescope");
+  const telescopeIndex = orbitStart + 3;
+  const remote = { ...save, tiles: [[last, solar.id], [orbitStart, drill.id],
+    [orbitStart + 2, solar.id], [telescopeIndex, telescope.id]], materials: { ...save.materials, research: 300 },
+    structures: [{ index: orbitStart, width: 2, height: 2, disabled: true }], longOrbit: true,
     planetBounds: null, weatherForecasts: null, map: { seed: 1, abundance: 0, paint: {} }, space: null };
   const terminator = network.sites.find(site => site.id === "terminator");
   const climateBase = { ...remote, longOrbit: false, tiles: [[511*1024+511, solar.id]],
@@ -214,7 +220,8 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   const selected = await command("select-base", { base: orbit.id, revision: imported.state.revision });
   const { default: artwork } = await import("../Source/wwwroot/artwork.js");
   assert.deepEqual([...selected.state.allowedBuildings].sort((a, b) => a - b),
-    catalog.buildings.filter(building => artwork.hasOrbitStructure(building.id)).map(building => building.id));
+    catalog.buildings.filter(building => artwork.hasOrbitStructure(building.id) ||
+      ["hub", "telescope"].includes(building.spaceRole)).map(building => building.id));
   assert.ok(!selected.state.allowedBuildings.includes(drill.id));
   const remoteResponse = await get("/api/map");
   const orbitCells = new Uint8Array(await remoteResponse.arrayBuffer());
@@ -240,4 +247,21 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   const after = new DataView(await (await get("/api/climate")).arrayBuffer());
   assert.equal(changed.state.climate.baseTemperature, 10);
   assert.equal(after.getInt16(2,true)-before.getInt16(2,true), 100);
+  const backInOrbit = await command("select-base", { base: orbit.id, revision: changed.state.revision });
+  await command("tester-step", { amount: 1 });
+  const observing = await (await get(`/api/state?inspect=${telescopeIndex}`)).json();
+  assert.equal(observing.telescope.online, true);
+  assert.equal(observing.telescope.range, 600);
+  await command("explore", { index: telescopeIndex, revision: backInOrbit.state.revision });
+  const surveying = await (await get(`/api/state?inspect=${telescopeIndex}`)).json();
+  assert.equal(surveying.stock.research, 0);
+  assert.equal(surveying.telescope.survey.ticksLeft, 192);
+  await command("tester-step", { amount: 100 });
+  await command("tester-step", { amount: 92 });
+  const discovered = await (await get("/api/logistics")).json();
+  assert.deepEqual(discovered.systems.map(system => system.id), ["sol", "proxima"]);
+  const flight = discovered.legs.find(leg => leg.to === "proxima-world");
+  assert.ok(flight.distance > 400);
+  assert.ok(!flight.flights.some(quote => quote.type === "cargo-shuttle"));
+  assert.ok(flight.flights.some(quote => quote.type === "stellar-explorer" && quote.fuel > 0 && quote.ticks > 0));
 });

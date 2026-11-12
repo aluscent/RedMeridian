@@ -8,8 +8,8 @@ const spriteCache=new Map();
 let catalog,tiles,scene,request=0;
 
 function available(building,kind) {
-  if(kind==="mars") return building.spaceRole!=="dock";
-  return Artwork.hasOrbitStructure(building.id);
+  if(kind==="mars") return !["dock","telescope"].includes(building.spaceRole);
+  return Artwork.hasOrbitStructure(building.id) || ["hub","telescope"].includes(building.spaceRole);
 }
 
 function fillChoices() {

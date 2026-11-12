@@ -43,7 +43,8 @@ async Task TickLoop(ColonySession session, CancellationToken cancellation)
 record Command(string? Action, int Index = -1, int Type = 0, int Revision = -1, SaveData? Save = null,
     int EndIndex = -1, MapSettings? Map = null, string? Base = null, int Ship = 0,
     Dictionary<string,long>? Cargo = null, CargoRoute? Route = null, string? Technology = null,
-    string? Material = null, int Amount = 0, string? ShipType = null, ClimateSettings? Climate = null, string? SaveSlot = null);
+    string? Material = null, int Amount = 0, string? ShipType = null, ClimateSettings? Climate = null, string? SaveSlot = null,
+    bool GalaxySurvey = false);
 
 
 sealed class ColonySession
@@ -77,7 +78,9 @@ sealed class ColonySession
 
     Colony Current => stress ?? program.Base(selectedBase);
     object State(int inspect = -1) => Current.Status(revision,stress is not null,paused,speed,
-        started,File.Exists(defaultSave),worldRevision,inspect,developerMode);
+        started,File.Exists(defaultSave),worldRevision,inspect,developerMode,
+        stress is null && inspect >= 0 ? program.InspectTelescope(Current,inspect) : null,
+        program.VisitedGalaxies);
 
     string SavePath(string? slot)
     {
@@ -115,7 +118,7 @@ sealed class ColonySession
             return Current.MapSettings;
         }
     }
-    public object Logistics() { lock (gate) return program.Summary(); }
+    public object Logistics() { lock (gate) return program.Summary(selectedBase); }
     public IResult Climate(HttpContext context)
     {
         lock (gate)
@@ -273,7 +276,7 @@ sealed class ColonySession
                         RequireDeveloperMode();
                         if (command.Revision != revision) throw new InvalidOperationException("Base changed. Try again.");
                         if (command.Material is not { } material || command.Amount is < 1 or > 100_000 ||
-                            !rules.Materials.Any(item => item.Id == material))
+                            !program.MaterialAvailable(material))
                             throw new InvalidOperationException("Select a resource and an amount from 1 to 100,000.");
                         var grant = new Dictionary<string,long> { [material] = command.Amount };
                         if (!Current.CanReceive(grant)) throw new InvalidOperationException("Grant exceeds storage capacity.");
@@ -313,6 +316,7 @@ sealed class ColonySession
                     case "select-base":
                     case "assemble":
                     case "dispatch":
+                    case "explore":
                     case "set-route":
                     case "clear-route":
                         if (stress is not null) throw new InvalidOperationException("Return to your colony to use logistics.");
@@ -343,6 +347,7 @@ sealed class ColonySession
                 Console.Error.WriteLine(error);
                 return Results.Json(new { message = "Could not write the colony save.", state = State() }, statusCode: 500);
             }
+            if (command.Action is "remove" or "area" or "climate") program.PruneSurveys();
             return Results.Ok(new { message, edits, state = State() });
         }
     }
@@ -362,6 +367,9 @@ sealed class ColonySession
             case "dispatch":
                 program.Dispatch(Current, command.Ship, command.Base, command.Cargo);
                 return "Spacecraft launched.";
+            case "explore":
+                program.StartSurvey(Current,command.Index,command.GalaxySurvey);
+                return "Exploration started.";
             case "set-route":
                 program.SetRoute(command.Route ?? throw new InvalidOperationException("Provide a cargo route."));
                 return "Recurring cargo route configured.";

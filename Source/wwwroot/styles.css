@@ -8,6 +8,11 @@
 .logistics table{border-collapse:collapse;white-space:nowrap}
 .logistics th,.logistics td{padding:5px 8px;text-align:left;border-bottom:1px solid var(--line)}
 .logistics input{width:6em}
+#travelMap{margin:8px}
+#starChart{display:block;width:100%;height:290px;margin:6px 0;background:#101925;border:1px solid #42536a;border-radius:6px}
+#explorationDialog{max-width:min(470px,90vw);background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px}
+#explorationDialog::backdrop{background:#0009}
+#explorationDialog form{margin-top:14px}
 body{margin:0;color:var(--text);background:radial-gradient(ellipse at 25% 0%,#2f221a,var(--bg) 65%);font:14px system-ui,sans-serif}
 header,main,footer{max-width:1560px;margin:auto;padding-inline:clamp(12px,3vw,38px)}
 header,footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-block:16px}
