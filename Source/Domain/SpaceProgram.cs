@@ -10,9 +10,8 @@ sealed record CargoRoute(int Ship, string Source, string Destination, string Mat
 sealed partial class Colony
 {
     readonly Dictionary<int,AssemblyOrder> assemblyOrders = new();
-    public int PendingShips => assemblyOrders.Count;
-    bool IsAssemblyYard(int index) => (uint)index < Grid.Length && Grid[index] > 0 &&
-        rules.Buildings[Grid[index] - 1].SpaceRole == "assembly";
+    bool IsAssemblyYard(int index) => BuildingAt(index) is > 0 and var type &&
+        rules.Buildings[type - 1].SpaceRole == "assembly";
 
     public void StartAssembly(int tile, ShipType type)
     {
@@ -76,12 +75,12 @@ sealed partial class Colony
 sealed partial class SpaceProgram(GameRules rules, Colony mars, UniverseCatalog? catalog = null)
 {
     public const int FoundingAlloy = 24;
-    const int MaxShips = 32;
     readonly Dictionary<string,Colony> bases = new() { [ColonySite.Mars.Id] = mars };
     readonly List<Spacecraft> ships = new();
     readonly Dictionary<int,CargoRoute> routes = new();
     readonly UniverseCatalog universe = catalog ?? UniverseCatalog.Legacy;
     public Colony Mars => mars;
+    internal int CountDueShipments() => ships.Count(ship => ship.Destination is not null && ship.ArrivalTick <= mars.Tick);
     public string[] VisitedGalaxies => bases.Values.Select(colony => colony.Site.Galaxy).Distinct().ToArray();
     public bool MaterialAvailable(string id) => rules.Materials.Any(material => material.Id == id &&
         (material.Galaxy is null || bases.Values.Any(colony => colony.Site.Galaxy == material.Galaxy)));
@@ -99,7 +98,7 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars, UniverseCatalog?
     public Colony Base(string? id) => id is not null && bases.TryGetValue(id, out var colony) ? colony :
         throw new InvalidOperationException("Select an established base.");
 
-    ColonySite Site(string? id) => KnownSites.SingleOrDefault(site => site.Id == id) ??
+    ColonySite Site(string? id) => universe.FindSite(id) is { } site && discovered.Contains(site.System) ? site :
         throw new InvalidOperationException("Select a known destination.");
 
     static int LaunchCost(ColonySite from,int distance) =>
@@ -147,12 +146,8 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars, UniverseCatalog?
         })).ToArray()
     };
 
-    public void Assemble(Colony origin, int index, string? type)
-    {
-        if (ships.Count + bases.Values.Sum(colony => colony.PendingShips) >= MaxShips)
-            throw new InvalidOperationException("Fleet limit reached.");
+    public void Assemble(Colony origin, int index, string? type) =>
         origin.StartAssembly(index, rules.ShipType(type));
-    }
 
     public void Dispatch(Colony origin, int shipId, string? destination, Dictionary<string,long>? manifest, bool automatic = false)
     {
@@ -234,25 +229,53 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars, UniverseCatalog?
             target.Receive(ship.Cargo!);
             ships[i] = new(ship.Id, ship.Destination, Type: ship.Type);
         }
+        AdvanceRoutes();
+    }
+
+    void AdvanceRoutes()
+    {
+        if (routes.Count == 0) return;
+        var inbound = new Dictionary<(string Destination, string Material),long>();
+        foreach (var ship in ships)
+        {
+            if (ship.Destination is not { } destination) continue;
+            foreach (var (material, quantity) in ship.Cargo!)
+                AddInbound(destination,material,quantity);
+        }
+
         foreach (var route in routes.Values.OrderBy(route => route.Ship))
         {
             var ship = ships[route.Ship - 1];
             if (ship.Destination is not null) continue;
             var source = bases[route.Source];
             var target = bases[route.Destination];
-            long incoming = ships.Where(other => other.Destination == route.Destination)
-                .Sum(other => other.Cargo!.GetValueOrDefault(route.Material));
+            long incoming = inbound.GetValueOrDefault((route.Destination,route.Material));
             long need = route.Reorder - target.Stock(route.Material) - incoming;
+            if (need <= 0 || source.Stock(route.Material) <= route.Reserve) continue;
             var type = rules.ShipType(ship.Type);
-            int fuel = route.Material == "propellant" ? Leg(source.Site,target.Site,type).Fuel : 0;
-            long quantity = Math.Min(type.Payload, Math.Min(need, source.Stock(route.Material) - route.Reserve - fuel));
+            var origin = ship.Location == route.Destination ? target : source;
+            var destination = origin == source ? target : source;
+            int fuel = Leg(origin.Site,destination.Site,type).Fuel;
+            if (origin.Stock("propellant") < fuel || !origin.CanDock || !origin.Online("relay")) continue;
+            int reservedFuel = route.Material == "propellant" ? Leg(source.Site,target.Site,type).Fuel : 0;
+            long quantity = Math.Min(type.Payload, Math.Min(need, source.Stock(route.Material) - route.Reserve - reservedFuel));
             if (quantity <= 0) continue;
             try
             {
-                if (ship.Location == route.Destination) Dispatch(target, ship.Id, route.Source, null, automatic: true);
-                else Dispatch(source, ship.Id, route.Destination, new() { [route.Material] = quantity }, automatic: true);
+                if (origin == target) Dispatch(target, ship.Id, route.Source, null, automatic: true);
+                else
+                {
+                    Dispatch(source, ship.Id, route.Destination, new() { [route.Material] = quantity }, automatic: true);
+                    AddInbound(route.Destination,route.Material,quantity);
+                }
             }
             catch (InvalidOperationException) { /* Recheck power, fuel, and availability next tick. */ }
+        }
+
+        void AddInbound(string destination,string material,long quantity)
+        {
+            var key = (destination,material);
+            inbound[key] = inbound.GetValueOrDefault(key) + quantity;
         }
     }
 
@@ -280,16 +303,18 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars, UniverseCatalog?
     void ShareGalaxyResearch(Colony colony) =>
         bases.Values.FirstOrDefault(other => other != colony && other.Site.Galaxy == colony.Site.Galaxy)?.ShareResearchWith(colony);
 
-    public static SpaceProgram Restore(GameRules rules, SaveData? save)
+    public static SpaceProgram Restore(GameRules rules, SaveData? save) =>
+        Restore(rules,save,UniverseCatalog.Restore(save?.Space?.Universe));
+
+    internal static SpaceProgram Restore(GameRules rules, SaveData? save, UniverseCatalog universe)
     {
-        var universe = UniverseCatalog.Restore(save?.Space?.Universe);
         var landing = universe.Settings is null ? null : universe.Sites.Single(site => site.Id == ColonySite.Mars.Id);
         if (universe.Settings is { } seed && save?.Map?.Seed != seed.Seed)
             throw new InvalidOperationException("The landing map does not match the campaign seed.");
         var program = new SpaceProgram(rules, Colony.Restore(rules, save,landing),universe);
         if (save!.Space is not { } space) return program;
         if (save.Version != 4 || space.Bases is null || space.Ships is null ||
-            space.Bases.Count >= universe.Sites.Length || space.Ships.Length > MaxShips)
+            space.Bases.Count >= universe.Sites.Length)
             throw new InvalidOperationException("Invalid space program save.");
         program.RestoreDiscoveries(space.Discovered);
         foreach (var (id, colonySave) in space.Bases)
@@ -302,8 +327,6 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars, UniverseCatalog?
             program.ShareGalaxyResearch(colony);
         }
         program.RestoreSurveys(space.Surveys);
-        if (space.Ships.Length + program.bases.Values.Sum(colony => colony.PendingShips) > MaxShips)
-            throw new InvalidOperationException("Fleet and assembly orders exceed the fleet limit.");
         var founding = new HashSet<string>();
         foreach (var ship in space.Ships)
         {

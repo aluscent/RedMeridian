@@ -9,7 +9,11 @@ sealed partial class UniverseCatalog(UniverseSeed? settings, Galaxy[] galaxies, 
     public Galaxy[] Galaxies { get; } = galaxies;
     public StarSystem[] Systems { get; } = systems;
     public ColonySite[] Sites { get; } = sites;
-    public StarSystem System(string id) => Systems.Single(system => system.Id == id);
+    readonly Dictionary<string,ColonySite> sitesById = sites.ToDictionary(site => site.Id);
+    readonly Dictionary<string,StarSystem> systemsById = systems.ToDictionary(system => system.Id);
+    public ColonySite? FindSite(string? id) => id is null ? null : sitesById.GetValueOrDefault(id);
+    public StarSystem System(string id) => systemsById.TryGetValue(id,out var system) ? system :
+        throw new InvalidOperationException("Unknown star system.");
 
     public static UniverseCatalog Restore(UniverseSeed? settings) => settings?.GeneratorVersion switch
     {

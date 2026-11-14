@@ -2,4 +2,6 @@
 /Source/obj/
 /Tests/bin/
 /Tests/obj/
+/Tools/Stress/bin/
+/Tools/Stress/obj/
 /dist/

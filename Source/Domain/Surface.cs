@@ -11,12 +11,16 @@ sealed record TileEdit(int Index,int Type,int Width = 1,int Height = 1);
 
 sealed class Surface
 {
-    readonly int[] owner = new int[Colony.Size * Colony.Size];
+    readonly Dictionary<int,Structure> structures = new();
     readonly GameRules rules;
     readonly ColonySite? site;
     public MapSettings Settings { get; }
-    public byte[] Widths { get; } = new byte[Colony.Size * Colony.Size];
-    public byte[] Heights { get; } = new byte[Colony.Size * Colony.Size];
+    public readonly record struct Structure(byte Type, byte Width, byte Height)
+    {
+        public Footprint Footprint => new(Width,Height);
+    }
+    public Structure StructureAt(int anchor) => structures.GetValueOrDefault(anchor);
+    public IEnumerable<KeyValuePair<int,Structure>> Structures => structures;
 
     public Surface(GameRules rules,MapSettings? settings,ColonySite? site = null)
     {
@@ -25,7 +29,7 @@ sealed class Surface
         settings ??= new();
         if ((settings.DensityPercent ? settings.Abundance is < 3 or > 15 : settings.Abundance is < 0 or > 200) ||
             settings.Paint?.Count > 16_384 ||
-            settings.Paint?.Any(pair => (uint)pair.Key >= owner.Length ||
+            settings.Paint?.Any(pair => (uint)pair.Key >= Colony.Size * Colony.Size ||
                 pair.Value is not null && !rules.World.Deposits.Any(d => d.Id == pair.Value) ||
                 site?.ProtectLandingDeposits != false && rules.FixedDeposit(pair.Key) is not null) == true)
             throw new InvalidOperationException("Invalid map settings or edit to a protected landing deposit.");
@@ -38,10 +42,25 @@ sealed class Surface
         return rules.DepositAt(index,Settings.Seed,Settings.Abundance,Settings.DensityPercent,site);
     }
 
-    public int AnchorAt(int index) => (uint)index < owner.Length ? owner[index] - 1 : -1;
+    public int AnchorAt(int index)
+    {
+        if ((uint)index >= Colony.Size * Colony.Size) return -1;
+        if (structures.ContainsKey(index)) return index;
+        // Footprints extend at most three cells right and down from their anchor.
+        int x = index % Colony.Size, y = index / Colony.Size;
+        for (int dy = 0; dy <= Math.Min(y,MaxFootprint - 1); dy++)
+        for (int dx = 0; dx <= Math.Min(x,MaxFootprint - 1); dx++)
+        {
+            int anchor = index - dy * Colony.Size - dx;
+            if (structures.TryGetValue(anchor,out var structure) && dx < structure.Width && dy < structure.Height)
+                return anchor;
+        }
+        return -1;
+    }
 
+    const int MaxFootprint = 4;
     public static bool Fits(int index,Footprint shape) => (uint)index < Colony.Size * Colony.Size &&
-        shape.Width is >= 1 and <= 4 && shape.Height is >= 1 and <= 4 &&
+        shape.Width is >= 1 and <= MaxFootprint && shape.Height is >= 1 and <= MaxFootprint &&
         index % Colony.Size + shape.Width <= Colony.Size && index / Colony.Size + shape.Height <= Colony.Size;
 
     public static IEnumerable<int> Tiles(int index,Footprint shape)
@@ -52,49 +71,43 @@ sealed class Surface
     }
 
     public bool Open(int index,Footprint shape) => Fits(index,shape) &&
-        Tiles(index,shape).All(tile => owner[tile] == 0);
+        Tiles(index,shape).All(tile => AnchorAt(tile) < 0);
 
-    public void Occupy(int index,Footprint shape)
-    {
-        foreach (int tile in Tiles(index,shape)) owner[tile] = index + 1;
-        Widths[index] = (byte)shape.Width;
-        Heights[index] = (byte)shape.Height;
-    }
+    public void Occupy(int index,int type,Footprint shape) =>
+        structures.Add(index,new((byte)type,(byte)shape.Width,(byte)shape.Height));
 
-    public void Clear(int index)
-    {
-        foreach (int tile in Tiles(index,new(Widths[index],Heights[index]))) owner[tile] = 0;
-        Widths[index] = Heights[index] = 0;
-    }
+    public void Clear(int index) => structures.Remove(index);
 }
 
 sealed class ProductionGroup(Building building, int sunlight = 100)
 {
-    readonly SortedSet<int> members = new();
+    SortedSet<int>? members;
     int[]? order;
     public Building Building { get; } = building;
     public int Sunlight { get; } = sunlight;
-    public int Count => members.Count;
+    public int Count => members?.Count ?? 0;
     public int Active { get; set; }
-    public IEnumerable<int> ActiveMembers => members.Take(Active);
+    public IEnumerable<int> ActiveMembers => members?.Take(Active) ?? [];
 
     public void Add(int index)
     {
-        members.Add(index);
+        (members ??= new()).Add(index);
         order = null;
         Active = 0;
     }
 
     public void Remove(int index)
     {
+        if (members is null) return;
         members.Remove(index);
+        if (members.Count == 0) members = null;
         order = null;
         Active = 0;
     }
 
     public bool IsRunning(int index)
     {
-        if (Active == 0) return false;
+        if (Active == 0 || members is null) return false;
         order ??= members.ToArray();
         int rank = Array.BinarySearch(order,index);
         return rank >= 0 && rank < Active;

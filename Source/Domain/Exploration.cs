@@ -7,8 +7,8 @@ sealed record TelescopeStatus(int Level, int Range, bool Online, SurveyProgress?
 
 sealed partial class Colony
 {
-    public int TelescopeLevel(int index) => (uint)index < Grid.Length && Grid[index] > 0 &&
-        rules.Buildings[Grid[index] - 1].SpaceRole == "telescope" ? Level(index) : 0;
+    public int TelescopeLevel(int index) => BuildingAt(index) is > 0 and var type &&
+        rules.Buildings[type - 1].SpaceRole == "telescope" ? Level(index) : 0;
 
     public bool TelescopeOnline(int index) => TelescopeLevel(index) > 0 && Group(index).IsRunning(index);
     public int TelescopeAnchor(int tile) => surface.AnchorAt(tile);

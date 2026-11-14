@@ -142,23 +142,26 @@ sealed partial class Colony
     {
         if (climate is null || !settings.Valid) throw new InvalidOperationException("Invalid map temperature or humidity.");
         if (settings == climate.Settings) return 0;
-        var flooded = new HashSet<int>();
-        foreach (int index in PlayableTiles())
+        var flooded = new List<int>();
+        foreach (var (anchor,structure) in surface.Structures)
         {
-            int anchor = surface.AnchorAt(index);
-            if (anchor < 0) continue;
-            int elevation = climate.Elevation(index);
-            if (climate.Water(elevation,climate.Temperature(index)) != WaterState.Liquid &&
-                climate.Water(elevation,climate.Temperature(index,settings)) == WaterState.Liquid)
-                flooded.Add(anchor);
+            foreach (int index in Surface.Tiles(anchor,structure.Footprint))
+            {
+                int elevation = climate.Elevation(index);
+                if (climate.Water(elevation,climate.Temperature(index)) != WaterState.Liquid &&
+                    climate.Water(elevation,climate.Temperature(index,settings)) == WaterState.Liquid)
+                {
+                    flooded.Add(anchor);
+                    break;
+                }
+            }
         }
         foreach (int anchor in flooded) Demolish(anchor,null);
         climate.Settings = settings;
-        foreach (int index in PlayableTiles())
+        foreach (var (index,structure) in surface.Structures)
         {
-            if (Grid[index] == 0) continue;
-            var building = rules.Buildings[Grid[index]-1];
-            bool safe = TemperatureAllows(index,building,new(Widths[index],Heights[index]));
+            var building = rules.Buildings[structure.Type-1];
+            bool safe = TemperatureAllows(index,building,structure.Footprint);
             if (safe && climateBlocked.Remove(index) && !disabled.Contains(index)) Group(index).Add(index);
             if (!safe && climateBlocked.Add(index) && !disabled.Contains(index)) Group(index).Remove(index);
         }
