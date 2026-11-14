@@ -6,7 +6,7 @@ The game runs in one ASP.NET Core process. The browser renders the selected map;
 
 - `Source/Program.cs` wires HTTP routes and the simulation timer. It does not implement gameplay commands or disk-save rules.
 - `Source/Application/ColonySession.cs` owns the campaign session, synchronization, selected base, and command response envelope. It invokes feature command handlers while holding the session lock.
-- `Source/Application/*Commands.cs` owns command validation and calls domain operations for its feature. Add feature behavior here rather than to the HTTP entry point.
+- `Source/Application/*Commands.cs` owns command validation and calls domain operations for its feature. `GameplayCommands.cs` registers actions by feature; add feature behavior there rather than to the HTTP entry point.
 - `Source/Application/SaveRepository.cs` owns save paths, disk writes, and backup creation. `Source/Domain/SaveData.cs` is the compatibility-sensitive wire format; `ColonySave.cs` owns colony conversion and validation.
 - `Source/Domain` implements the simulation. `SpaceProgram` coordinates bases and fleet; `Colony` coordinates buildings and resources. These are still broad aggregates and will be separated in later stages of issue #31.
 - `Source/Config` owns ordinary buildings, materials, research, ships, and world settings. Resource icon filenames are `wwwroot/assets/resource-{id}.png`; unknown or missing icons fall back to text.

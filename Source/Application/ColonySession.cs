@@ -154,15 +154,6 @@ sealed class ColonySession
                         revision++;
                         message = "Choose a map or load a save.";
                         break;
-                    case "build":
-                    case "remove":
-                    case "toggle":
-                    case "upgrade":
-                    case "area":
-                        var construction = ConstructionCommands.Apply(Current,command,revision);
-                        (message,edits) = (construction.Message,construction.Edits);
-                        revision++;
-                        break;
                     case "pause":
                         paused = !paused;
                         message = paused ? "Simulation paused." : "Simulation resumed.";
@@ -178,11 +169,6 @@ sealed class ColonySession
                         revision++;
                         progress = 0;
                         message = stress is null ? "Returned to your colony." : "Loaded 100,000 structures in a separate colony.";
-                        break;
-                    case "activate-research":
-                        var research = ResearchCommands.Activate(Current,command,revision);
-                        (message,edits) = (research.Message,research.Edits);
-                        revision++;
                         break;
                     case "tester-grant":
                         RequireDeveloperMode();
@@ -245,18 +231,11 @@ sealed class ColonySession
                         message = $"Viewing {Current.Site.Name}.";
                         revision++;
                         break;
-                    case "assemble":
-                    case "dispatch":
-                    case "explore":
-                    case "set-route":
-                    case "clear-route":
-                        if (stress is not null) throw new InvalidOperationException("Return to your colony to use logistics.");
-                        var fleet = FleetCommands.Apply(program,Current,command,revision);
-                        (message,edits) = (fleet.Message,fleet.Edits);
+                    default:
+                        var gameplay = GameplayCommands.Apply(program,Current,command,revision,stress is not null);
+                        (message,edits) = (gameplay.Message,gameplay.Edits);
                         revision++;
                         break;
-                    default:
-                        throw new InvalidOperationException("Unknown command.");
                 }
             }
             catch (Exception error) when (error is InvalidOperationException or JsonException or InvalidDataException)
