@@ -1,4 +1,5 @@
 using RedMeridian.Domain;
+using RedMeridian.Application;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 
