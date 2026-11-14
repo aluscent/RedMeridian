@@ -44,31 +44,35 @@ sealed partial class Colony
     public bool Online(string role) => consumers.Any(group => group.Building.SpaceRole == role && group.Active > 0);
     public bool CanDock => Online(Site.Kind == "orbit" ? "dock" : "terminal") ||
         consumers.Any(group => group.Building.SpaceRole == "hub" && group.Count > 0);
-    public long Stock(string material) => stock.GetValueOrDefault(material);
+    public long Stock(string material) => resources.Contains(material) ? resources[material] : 0;
+    public object ResourceSnapshot() => resources.Snapshot(tick);
+    internal ResourceFlow ResourceFlowFor(string material) => resources.FlowOf(material);
     public bool CanReceive(Dictionary<string,long> cargo) =>
-        cargo.All(item => stock.ContainsKey(item.Key) && item.Value <= StockLimit - stock[item.Key]);
+        cargo.All(item => resources.Contains(item.Key) && item.Value <= StockLimit - resources[item.Key]);
 
     public void Receive(Dictionary<string,long> cargo)
     {
         foreach (var (id, amount) in cargo)
-            stock[id] += amount;
+            resources[id] += amount;
     }
 
     public void Withdraw(Dictionary<string,long> cost)
     {
         if (cost.Any(item => Stock(item.Key) < item.Value))
             throw new InvalidOperationException("Insufficient stock for cargo, construction, or launch fuel.");
-        foreach (var (id, amount) in cost) stock[id] -= amount;
+        foreach (var (id, amount) in cost) resources[id] -= amount;
     }
+
+    public void RecordFreight(IReadOnlyDictionary<string,long> cargo, bool inbound) => resources.RecordFreight(cargo,inbound);
 
     public object LogisticsSummary() => new
     {
-        Site.Id, stock = new Dictionary<string,long>(stock), delta = new Dictionary<string,long>(delta),
+        Site.Id, Site.MapId, stock = resources.StockSnapshot(), delta = resources.DeltaSnapshot(),
         dock = CanDock, relay = Online("relay"), assembly = Online("assembly"),
         orders = assemblyOrders.Values.Select(order => new { order.Type, order.Index, order.TicksLeft,
             running = CanDock && Group(order.Index).IsRunning(order.Index) }).ToArray(),
         reserves = rules.World.LifeSupport.ToDictionary(id => id,
-            id => stock[id] == 0 ? 0L : delta[id] < 0 ? (long?)(stock[id] / -delta[id]) : null)
+            id => Stock(id) == 0 ? 0L : resources.FlowOf(id).NetProduction is < 0 and var change ? (long?)(Stock(id) / -change) : null)
     };
 }
 
@@ -97,6 +101,9 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars, UniverseCatalog?
 
     public Colony Base(string? id) => id is not null && bases.TryGetValue(id, out var colony) ? colony :
         throw new InvalidOperationException("Select an established base.");
+
+    public Colony? FindMap(string mapId) => mapId.StartsWith(ColonySite.MapPrefix,StringComparison.Ordinal) ?
+        bases.GetValueOrDefault(mapId[ColonySite.MapPrefix.Length..]) : null;
 
     ColonySite Site(string? id) => universe.FindSite(id) is { } site && discovered.Contains(site.System) ? site :
         throw new InvalidOperationException("Select a known destination.");
@@ -176,6 +183,7 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars, UniverseCatalog?
         var cost = new Dictionary<string,long>(cargo) { ["propellant"] = cargo.GetValueOrDefault("propellant") + fuel };
         if (founding) cost["alloy"] = cargo.GetValueOrDefault("alloy") + FoundingAlloy;
         origin.Withdraw(cost);
+        origin.RecordFreight(cargo,inbound: false);
         ships[shipId - 1] = ship with
         {
             Destination = target.Id, ArrivalTick = mars.Tick + ticks, Cargo = cargo, Founding = founding
@@ -227,6 +235,7 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars, UniverseCatalog?
             var target = bases[ship.Destination];
             if ((!ship.Founding && !target.CanDock) || !target.CanReceive(ship.Cargo!)) continue;
             target.Receive(ship.Cargo!);
+            target.RecordFreight(ship.Cargo!,inbound: true);
             ships[i] = new(ship.Id, ship.Destination, Type: ship.Type);
         }
         AdvanceRoutes();
@@ -313,13 +322,13 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars, UniverseCatalog?
             throw new InvalidOperationException("The landing map does not match the campaign seed.");
         var program = new SpaceProgram(rules, Colony.Restore(rules, save,landing),universe);
         if (save!.Space is not { } space) return program;
-        if (save.Version != 4 || space.Bases is null || space.Ships is null ||
+        if (save.Version < 4 || space.Bases is null || space.Ships is null ||
             space.Bases.Count >= universe.Sites.Length)
             throw new InvalidOperationException("Invalid space program save.");
         program.RestoreDiscoveries(space.Discovered);
         foreach (var (id, colonySave) in space.Bases)
         {
-            if (id == ColonySite.Mars.Id || colonySave is null || colonySave.Version != 4 ||
+            if (id == ColonySite.Mars.Id || colonySave is null || colonySave.Version != save.Version ||
                 colonySave.Tick != save.Tick || colonySave.Space is not null)
                 throw new InvalidOperationException("Invalid remote base save.");
             var colony = Colony.Restore(rules, colonySave, program.Site(id));

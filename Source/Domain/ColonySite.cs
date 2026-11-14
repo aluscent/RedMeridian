@@ -8,6 +8,9 @@ sealed record ColonySite(string Id, string Name, string Kind, int Width, int See
     static readonly string[] AsteroidDeposits = ["iron", "titanium", "uranium"];
     static readonly string[] MoonDeposits = ["ice", "brine", "silicon"];
     public int Height => Length ?? Width;
+    public string RegionId => Id;
+    public string MapId => MapPrefix + RegionId;
+    public const string MapPrefix = "map:";
     public int Left => (Colony.Size - Width) / 2;
     public int Top => (Colony.Size - Height) / 2;
     public bool PlanetaryEngineering => Kind is "mars" or "planet";

@@ -10,9 +10,10 @@ sealed partial class Colony
             ? variants[climate.Sunlight(index)] : group;
     }
 
-    void Place(int index,int type,Footprint shape,int level = 1,bool off = false)
+    void Place(int index,int type,Footprint shape,int level = 1,bool off = false,int buildingId = 0)
     {
-        surface.Occupy(index,type,shape);
+        if (buildingId == 0) buildingId = ++lastBuildingId;
+        surface.Occupy(index,type,shape,buildingId);
         counts[type - 1]++;
         if (level > 1) levels.Add(index,level);
         if (!TemperatureAllows(index,rules.Buildings[type-1],shape)) climateBlocked.Add(index);
@@ -31,6 +32,7 @@ sealed partial class Colony
         if (!MatchesDeposit(index,b))
             throw new InvalidOperationException($"The anchor requires {rules.World.Deposits.Single(d => d.Id == b.Deposit).Name}.");
         CheckBuild(b,1);
+        CheckBuildingIds(1);
         Pay(b.Cost,1);
         Place(index,type,b.Footprint);
         RefreshCapacity();
@@ -88,6 +90,7 @@ sealed partial class Colony
         if (b is not null)
         {
             CheckBuild(b,edits.Count);
+            CheckBuildingIds(edits.Count);
             Pay(b.Cost,edits.Count);
         }
 
@@ -115,7 +118,9 @@ sealed partial class Colony
         bool running = !off && group.IsRunning(index);
         return new
         {
-            index, type, level, disabled = off, running, workers = running ? recipe.Crew : 0,
+            index, type, buildingId = structure.BuildingId,
+            tile = new { Site.MapId, x = index % Size, y = index / Size },
+            level, disabled = off, running, workers = running ? recipe.Crew : 0,
             crew = recipe.Crew, powerOutput = running ? OutputPower(group) : 0,
             ratedPowerOutput = OutputPower(group), powerUse = running ? recipe.Power : 0,
             ratedPowerUse = recipe.Power, outputs = recipe.Outputs,
@@ -181,7 +186,7 @@ sealed partial class Colony
 
     void CheckCost(Dictionary<string,int> cost,int count,string name)
     {
-        var missing = cost.Where(item => stock[item.Key] < (long)item.Value * count)
+        var missing = cost.Where(item => resources[item.Key] < (long)item.Value * count)
             .Select(item => $"{item.Value * count} {rules.Materials.Single(m => m.Id == item.Key).Name}");
         var shortages = string.Join(", ",missing);
         if (shortages.Length != 0) throw new InvalidOperationException($"Need {shortages} for {count} × {name}.");
@@ -189,7 +194,13 @@ sealed partial class Colony
 
     void Pay(Dictionary<string,int> cost,int count)
     {
-        foreach (var (id,amount) in cost) stock[id] -= (long)amount * count;
+        foreach (var (id,amount) in cost) resources[id] -= (long)amount * count;
+    }
+
+    void CheckBuildingIds(int count)
+    {
+        if (lastBuildingId > int.MaxValue - count)
+            throw new InvalidOperationException("This map has exhausted its building IDs.");
     }
 
     void Demolish(int index,Dictionary<string,long>? salvage)
@@ -206,8 +217,8 @@ sealed partial class Colony
         if (salvage is null) return;
         foreach (var (id,amount) in rules.Buildings[i].Cost)
         {
-            long recovered = Math.Min(StockLimit - stock[id],amount / 2);
-            stock[id] += recovered;
+            long recovered = Math.Min(StockLimit - resources[id],amount / 2);
+            resources[id] += recovered;
             if (recovered > 0) salvage[id] = salvage.GetValueOrDefault(id) + recovered;
         }
     }

@@ -18,6 +18,7 @@ app.MapGet("/api/saves", (ColonySession session) => session.Saves());
 app.MapGet("/api/state", (int? inspect, ColonySession session) => session.Read(inspect ?? -1));
 app.MapGet("/api/surface", (HttpContext context, ColonySession session) => session.Surface(context));
 app.MapGet("/api/map", (HttpContext context, ColonySession session) => session.Map(context));
+app.MapGet("/api/map-resources", (string mapId, ColonySession session) => session.MapResources(mapId));
 app.MapGet("/api/climate", (HttpContext context, ColonySession session) => session.Climate(context));
 app.MapGet("/api/logistics", (ColonySession session) => session.Logistics());
 app.MapPost("/api/command", (Command command, ColonySession session) => session.Apply(command));
@@ -150,6 +151,14 @@ sealed class ColonySession
         }
     }
     public object Logistics() { lock (gate) return program.Summary(selectedBase); }
+    public IResult MapResources(string mapId)
+    {
+        lock (gate)
+        {
+            var colony = program.FindMap(mapId);
+            return colony is null ? Results.NotFound() : Results.Ok(colony.ResourceSnapshot());
+        }
+    }
     public IResult Climate(HttpContext context)
     {
         lock (gate)
@@ -331,7 +340,7 @@ sealed class ColonySession
                             throw new InvalidOperationException("Choose a new, unused save name.");
                         Persist(program,slot,command.SaveSlot is null ? diskVersion : 0);
                         activeSlot = slot;
-                        diskVersion = 4;
+                        diskVersion = Colony.SaveVersion;
                         message = slot is null or "" ? "Colony saved to disk." : $"Colony saved as {slot}.";
                         break;
                     case "import":
@@ -340,7 +349,7 @@ sealed class ColonySession
                         var imported = SpaceProgram.Restore(rules,command.Save);
                         Persist(imported,null,0);
                         activeSlot = null;
-                        diskVersion = 4;
+                        diskVersion = Colony.SaveVersion;
                         Open(imported);
                         message = "Colony imported and saved.";
                         break;
@@ -421,8 +430,8 @@ sealed class ColonySession
             if (File.Exists(fullPath))
             {
                 if (existingVersion == 0) existingVersion = ReadSave(fullPath)?.Version ?? 0;
-                string backup = fullPath + (existingVersion < 3 ? ".pre-v3" : ".pre-v4");
-                if (existingVersion is > 0 and < 4 && !File.Exists(backup)) File.Copy(fullPath,backup);
+                string backup = fullPath + (existingVersion < 3 ? ".pre-v3" : existingVersion == 3 ? ".pre-v4" : ".pre-v5");
+                if (existingVersion is > 0 and < Colony.SaveVersion && !File.Exists(backup)) File.Copy(fullPath,backup);
             }
             File.Move(temporary,fullPath,overwrite: true);
         }

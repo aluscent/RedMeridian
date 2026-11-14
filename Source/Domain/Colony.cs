@@ -7,12 +7,14 @@ record SaveData(int Version, int[][]? Tiles, long[]? Stock, int Population, long
     MapSettings? Map = null, SavedStructure[]? Structures = null,
     Dictionary<int,WeatherForecast>? WeatherForecasts = null, SpaceSave? Space = null,
     string[]? ActivatedResearch = null, bool LongOrbit = false, AssemblyOrder[]? Assembly = null,
-    PlanetSize? PlanetBounds = null, ClimateSettings? Climate = null, Dictionary<string,int>? EngineeringCredit = null, int MigrationCredit = 0);
+    PlanetSize? PlanetBounds = null, ClimateSettings? Climate = null, Dictionary<string,int>? EngineeringCredit = null, int MigrationCredit = 0,
+    string? MapId = null, int LastBuildingId = 0, Dictionary<string,ResourceFlow>? ResourceFlows = null);
 
 
 sealed partial class Colony
 {
     public const int Size = 1024;
+    public const int SaveVersion = 5;
     public const long StockLimit = 1_000_000_000_000;
     const int MaxPopulation = 100_000_000;
     readonly GameRules rules;
@@ -42,7 +44,7 @@ sealed partial class Colony
         }
         return layout;
     }
-    readonly Dictionary<string,long> stock, delta;
+    readonly MapResources resources;
     readonly Dictionary<string,int> planet;
     readonly Dictionary<string,int> engineeringCredit = new();
     readonly Dictionary<string,long> engineeringWork = new();
@@ -50,7 +52,7 @@ sealed partial class Colony
     readonly HashSet<int> climateBlocked = new();
     readonly PowerGrid power = new();
     readonly Queue<double> stepTimes = new();
-    int population, housing, crewUsed, migrationCredit;
+    int population, housing, crewUsed, migrationCredit, lastBuildingId;
     long tick, generated, used, demand;
     bool shortage;
 
@@ -96,15 +98,14 @@ sealed partial class Colony
             .OrderBy(g => g.Building.Priority).ToArray();
         batteries = allGroups.Where(g => g.Building.Storage > 0).ToArray();
         observatories = consumers.Where(g => g.Building.ForecastsWeather).ToArray();
-        stock = rules.Materials.ToDictionary(m => m.Id, m => m.Initial);
-        delta = rules.Materials.ToDictionary(m => m.Id, _ => 0L);
+        resources = new(rules,Site.MapId);
         planet = rules.World.Metrics.ToDictionary(m => m.Id, m => m.Initial);
         population = rules.World.StarterPopulation;
         if (stress)
         {
             for (int i = 0; i < 100_000; i++)
                 Place(unchecked(i * 499979) & (Size * Size - 1), allowedBuildings[i % allowedBuildings.Length],new Footprint());
-            foreach (var material in rules.Materials) stock[material.Id] = 100_000;
+            foreach (var material in rules.Materials) resources[material.Id] = 100_000;
             population = 60_000;
         }
         else if (!empty)
@@ -139,7 +140,7 @@ sealed partial class Colony
     {
         long start = Stopwatch.GetTimestamp();
         if (tick < long.MaxValue - 1) tick++;
-        foreach (var material in rules.Materials) delta[material.Id] = -stock[material.Id];
+        resources.BeginTick();
         int crew = population * rules.World.CrewPerColonist;
         generated = 0;
         used = 0;
@@ -173,7 +174,7 @@ sealed partial class Colony
             housing += running * consumer.Beds;
             colonistsProduced += running * consumer.ColonistsPerHour;
             foreach (var (id,amount) in consumer.Outputs)
-                stock[id] = Math.Min(StockLimit,stock[id] + (long)amount * running);
+                resources.Produce(id,(long)amount * running);
             if (running > 0 && Site.PlanetaryEngineering)
             {
                 foreach (var (id,increase) in consumer.Effects)
@@ -186,7 +187,6 @@ sealed partial class Colony
         crewUsed = population * rules.World.CrewPerColonist - crew;
         UpdatePopulation(colonistsProduced);
         RecordWeatherForecasts();
-        foreach (var material in rules.Materials) delta[material.Id] += stock[material.Id];
 
         stepTimes.Enqueue(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
         if (stepTimes.Count > 120) stepTimes.Dequeue();
@@ -211,7 +211,7 @@ sealed partial class Colony
         if (!Site.PlanetaryEngineering && b.Effects.Count > 0) return 0;
         int running = group.Count;
         if (b.Crew > 0) running = Math.Min(running,crew / b.Crew);
-        foreach (var (id,amount) in b.Inputs) running = (int)Math.Min(running,stock[id] / amount);
+        foreach (var (id,amount) in b.Inputs) running = (int)Math.Min(running,resources[id] / amount);
         return running;
     }
 
@@ -220,7 +220,7 @@ sealed partial class Colony
         var b = group.Building;
         group.Active = running;
         crew -= running * b.Crew;
-        foreach (var (id,amount) in b.Inputs) stock[id] -= (long)amount * running;
+        foreach (var (id,amount) in b.Inputs) resources.Consume(id,(long)amount * running);
     }
 
     void UpdatePopulation(int colonistsProduced)
@@ -232,10 +232,10 @@ sealed partial class Colony
         long suppliedPopulation = MaxPopulation;
         foreach (var id in world.LifeSupport)
         {
-            shortage |= stock[id] < ration;
-            stock[id] = Math.Max(0,stock[id] - ration);
-            surplus &= stock[id] >= (long)ration * world.ArrivalReserves;
-            suppliedPopulation = Math.Min(suppliedPopulation,stock[id] * world.ColonistsPerRation);
+            shortage |= resources[id] < ration;
+            resources.Consume(id,ration);
+            surplus &= resources[id] >= (long)ration * world.ArrivalReserves;
+            suppliedPopulation = Math.Min(suppliedPopulation,resources[id] * world.ColonistsPerRation);
         }
         bool arrival = tick % world.ArrivalInterval == 0;
         if (shortage)
@@ -271,7 +271,7 @@ sealed partial class Colony
             throw new InvalidOperationException("This milestone is unavailable in this galaxy.");
         if (activatedResearch.Contains(milestone.Id))
             throw new InvalidOperationException("This milestone is already active.");
-        if (stock[rules.World.ResearchMaterial] < milestone.Points)
+        if (resources[rules.World.ResearchMaterial] < milestone.Points)
             throw new InvalidOperationException($"Requires {milestone.Points} research points.");
         if (!milestone.Requires.All(activatedResearch.Contains))
             throw new InvalidOperationException("Activate the prerequisite milestones first.");
@@ -307,8 +307,8 @@ sealed partial class Colony
     {
         revision, stress, paused, speed, tick, started, hasSave, worldRevision, developerMode, site = Site, allowedBuildings,
         inspected = Inspect(inspect), telescope, visitedGalaxies = visitedGalaxies ?? [Site.Galaxy],
-        stock = new Dictionary<string,long>(stock),
-        delta = new Dictionary<string,long>(delta), population, housing,
+        stock = resources.StockSnapshot(),
+        delta = resources.DeltaSnapshot(), population, housing,
         supply = generated, demand, used, crewUsed, crewCapacity = population * rules.World.CrewPerColonist,
         batteryCharge = power.Charge, batteryCapacity = power.Capacity, batteryAvailable = power.Available,
         shortage, storm = Storm, planet = new Dictionary<string,int>(planet),
