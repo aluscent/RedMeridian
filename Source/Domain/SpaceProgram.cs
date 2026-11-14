@@ -10,8 +10,8 @@ sealed record CargoRoute(int Ship, string Source, string Destination, string Mat
 sealed partial class Colony
 {
     readonly Dictionary<int,AssemblyOrder> assemblyOrders = new();
-    bool IsAssemblyYard(int index) => (uint)index < Grid.Length && Grid[index] > 0 &&
-        rules.Buildings[Grid[index] - 1].SpaceRole == "assembly";
+    bool IsAssemblyYard(int index) => BuildingAt(index) is > 0 and var type &&
+        rules.Buildings[type - 1].SpaceRole == "assembly";
 
     public void StartAssembly(int tile, ShipType type)
     {
@@ -98,7 +98,7 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars, UniverseCatalog?
     public Colony Base(string? id) => id is not null && bases.TryGetValue(id, out var colony) ? colony :
         throw new InvalidOperationException("Select an established base.");
 
-    ColonySite Site(string? id) => KnownSites.SingleOrDefault(site => site.Id == id) ??
+    ColonySite Site(string? id) => universe.FindSite(id) is { } site && discovered.Contains(site.System) ? site :
         throw new InvalidOperationException("Select a known destination.");
 
     static int LaunchCost(ColonySite from,int distance) =>
@@ -251,13 +251,18 @@ sealed partial class SpaceProgram(GameRules rules, Colony mars, UniverseCatalog?
             var target = bases[route.Destination];
             long incoming = inbound.GetValueOrDefault((route.Destination,route.Material));
             long need = route.Reorder - target.Stock(route.Material) - incoming;
+            if (need <= 0 || source.Stock(route.Material) <= route.Reserve) continue;
             var type = rules.ShipType(ship.Type);
-            int fuel = route.Material == "propellant" ? Leg(source.Site,target.Site,type).Fuel : 0;
-            long quantity = Math.Min(type.Payload, Math.Min(need, source.Stock(route.Material) - route.Reserve - fuel));
+            var origin = ship.Location == route.Destination ? target : source;
+            var destination = origin == source ? target : source;
+            int fuel = Leg(origin.Site,destination.Site,type).Fuel;
+            if (origin.Stock("propellant") < fuel || !origin.CanDock || !origin.Online("relay")) continue;
+            int reservedFuel = route.Material == "propellant" ? Leg(source.Site,target.Site,type).Fuel : 0;
+            long quantity = Math.Min(type.Payload, Math.Min(need, source.Stock(route.Material) - route.Reserve - reservedFuel));
             if (quantity <= 0) continue;
             try
             {
-                if (ship.Location == route.Destination) Dispatch(target, ship.Id, route.Source, null, automatic: true);
+                if (origin == target) Dispatch(target, ship.Id, route.Source, null, automatic: true);
                 else
                 {
                     Dispatch(source, ship.Id, route.Destination, new() { [route.Material] = quantity }, automatic: true);

@@ -9,16 +9,13 @@ sealed partial class Colony
     {
         var tiles = new List<int[]>(counts.Sum());
         var structures = new List<SavedStructure>();
-        for (int y = Site.Top; y < Site.Top + Site.Height; y++)
-        for (int x = Site.Left; x < Site.Left + Site.Width; x++)
+        foreach (var (index,structure) in surface.Structures.OrderBy(item => item.Key))
         {
-            int index = y * Size + x;
-            if (Grid[index] == 0) continue;
-            tiles.Add([index,Grid[index]]);
+            tiles.Add([index,structure.Type]);
             int level = Level(index);
             bool off = disabled.Contains(index);
-            if (Widths[index] != 1 || Heights[index] != 1 || level != 1 || off)
-                structures.Add(new(index,Widths[index],Heights[index],level,off));
+            if (structure.Width != 1 || structure.Height != 1 || level != 1 || off)
+                structures.Add(new(index,structure.Width,structure.Height,level,off));
         }
         return new(4,tiles.ToArray(),null,population,tick,null,new(stock),new(planet),power.Charge,MapSettings,structures.ToArray(),
             weatherForecasts.Count == 0 ? null : new(weatherForecasts), ActivatedResearch: activatedResearch.ToArray(),
@@ -55,8 +52,8 @@ sealed partial class Colony
         int maxType = Math.Min(rules.Buildings.Length,save.Version == 1 ? 6 : save.Version == 2 ? 10 : byte.MaxValue);
         foreach (var tile in save.Tiles)
         {
-            if (tile is not { Length: 2 } || (uint)tile[0] >= colony.Grid.Length ||
-                tile[1] < 1 || tile[1] > maxType || colony.Grid[tile[0]] != 0)
+            if (tile is not { Length: 2 } || (uint)tile[0] >= Size * Size ||
+                tile[1] < 1 || tile[1] > maxType || colony.BuildingAt(tile[0]) != 0)
                 throw new InvalidOperationException("Invalid or unknown structure in colony save.");
             int index = tile[0], type = tile[1];
             var details = structures.Remove(index,out var saved) ? saved : new SavedStructure(index);
@@ -86,8 +83,8 @@ sealed partial class Colony
         {
             foreach (var (index, forecast) in save.WeatherForecasts)
             {
-                if ((uint)index >= colony.Grid.Length || colony.Grid[index] == 0 ||
-                    !rules.Buildings[colony.Grid[index] - 1].ForecastsWeather ||
+                int type = colony.BuildingAt(index);
+                if (type == 0 || !rules.Buildings[type - 1].ForecastsWeather ||
                     forecast is null || forecast.ObservedAt < 0 || forecast.ObservedAt > save.Tick ||
                     forecast.StartsInMin < 1 || forecast.StartsInMax < forecast.StartsInMin ||
                     forecast.DurationMin < 1 || forecast.DurationMax < forecast.DurationMin ||

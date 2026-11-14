@@ -149,18 +149,7 @@ sealed class ColonySession
             context.Response.Headers["X-Map-Revision"] = revision.ToString();
             context.Response.Headers["X-World-Revision"] = worldRevision.ToString();
             context.Response.Headers.CacheControl = "no-store";
-            var colony = Current;
-            var site = colony.Site;
-            int area = site.Width * site.Height;
-            var layout = new byte[area * 3];
-            for (int y = 0; y < site.Height; y++)
-            {
-                int start = (site.Top + y) * Colony.Size + site.Left, row = y * site.Width;
-                colony.Grid.AsSpan(start,site.Width).CopyTo(layout.AsSpan(row,site.Width));
-                colony.Widths.AsSpan(start,site.Width).CopyTo(layout.AsSpan(row+area,site.Width));
-                colony.Heights.AsSpan(start,site.Width).CopyTo(layout.AsSpan(row+2*area,site.Width));
-            }
-            return Results.Bytes(layout, "application/octet-stream",
+            return Results.Bytes(Current.MapLayout(), "application/octet-stream",
                 lastModified: null, entityTag: null, enableRangeProcessing: false);
         }
     }

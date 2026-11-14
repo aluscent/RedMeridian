@@ -75,12 +75,16 @@ void FootprintOwnership()
     Equal(false, Surface.Fits(Colony.Size - 1, shape));
     Equal(false, Surface.Fits(Colony.Size * (Colony.Size - 1), shape));
     Equal(true, surface.Open(0, shape));
-    surface.Occupy(0, shape);
+    surface.Occupy(0, 1, shape);
     Equal(0, surface.AnchorAt(Colony.Size + 1));
     Equal(false, surface.Open(1, shape));
     surface.Clear(0);
     Equal(-1, surface.AnchorAt(Colony.Size + 1));
     Equal(true, surface.Open(1, shape));
+    int rightEdge = 2 * Colony.Size - 1;
+    surface.Occupy(rightEdge, 1, new(1,4));
+    Equal(rightEdge, surface.AnchorAt(rightEdge + 3 * Colony.Size));
+    Equal(-1, surface.AnchorAt(rightEdge + 1));
 }
 
 void PlanetBounds()
@@ -96,13 +100,19 @@ void PlanetBounds()
     Reject(() => colony.Build(last + 1, solar.Id));
     var restored = Colony.Restore(rules, colony.Export());
     Equal(mars.Width, restored.Site.Width);
-    Equal((byte)solar.Id, restored.Grid[last]);
+    Equal((byte)solar.Id, restored.BuildingAt(last));
+    var layout = restored.MapLayout();
+    int area = mars.Width * mars.Height;
+    Equal(3 * area,layout.Length);
+    Equal((byte)solar.Id,layout[area - 1]);
+    Equal((byte)1,layout[2 * area - 1]);
+    Equal((byte)1,layout[3 * area - 1]);
 
     var oldColony = new Colony(rules);
     oldColony.Build(0, solar.Id);
     var oldRestored = Colony.Restore(rules, oldColony.Export());
     Equal(Colony.Size, oldRestored.Site.Width);
-    Equal((byte)solar.Id, oldRestored.Grid[0]);
+    Equal((byte)solar.Id, oldRestored.BuildingAt(0));
 }
 
 void AreaBuildIsAtomic()
@@ -708,7 +718,7 @@ void OceanTransitions()
         Reject(() => colony.Build(unusable, solar.Id));
         var restored = Colony.Restore(rules, colony.Export(), site);
         Equal(liquid, restored.Export().Climate);
-        Equal((byte)solar.Id, restored.Grid[shore]);
+        Equal((byte)solar.Id, restored.BuildingAt(shore));
     }
 }
 
@@ -757,8 +767,10 @@ void LegacySave()
 {
     var legacy = new SaveData(1, [[0, 1]], [31, 19, 8, 7], 4, 12, null);
     var colony = Colony.Restore(rules, legacy);
-    Equal((byte)1, colony.Widths[0]);
-    Equal((byte)1, colony.Heights[0]);
+    var layout = colony.MapLayout();
+    Equal((byte)1, colony.BuildingAt(0));
+    Equal((byte)1, layout[Colony.Size * Colony.Size]);
+    Equal((byte)1, layout[2 * Colony.Size * Colony.Size]);
     Equal(31L, colony.Export().Materials!["ore"]);
     Equal(12L, colony.Export().Tick);
 }

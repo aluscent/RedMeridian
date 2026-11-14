@@ -19,17 +19,10 @@ try
         (routes > 0 && (long)regions + orbits < 2))
         throw new ArgumentException("Use at least one region and batch, a supported speed, and no more routes than ships. Routes need two bases.");
 
-    // The current engine keeps three byte grids and one int grid for every base.
-    long gridBytes = ((long)regions + orbits) * Colony.Size * Colony.Size * 7;
-    long memoryBudget = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
-    if (gridBytes > memoryBudget / 2)
-        throw new ArgumentException($"This workload needs at least {MiB(gridBytes):N0} MiB for colony grids alone. " +
-            $"The runtime reports {MiB(memoryBudget):N0} MiB available. Reduce the base count for the current engine.");
-
     Console.WriteLine($"{RuntimeInformation.OSDescription}, {RuntimeInformation.ProcessArchitecture}, " +
         $"{Environment.ProcessorCount} logical CPUs, {RuntimeInformation.FrameworkDescription}");
     Console.WriteLine($"{regions:N0} regions, {orbits:N0} orbital bases, {ships:N0} spacecraft, {routes:N0} routes, " +
-        $"{batches:N0} batches at {speed}×. Estimated colony grid memory: {MiB(gridBytes):N0} MiB.");
+        $"{batches:N0} batches at {speed}×.");
     var rules = new GameRules(Path.Combine(AppContext.BaseDirectory,"Config"));
     var scenario = new StressScenario(rules,regions,orbits,ships,routes);
     var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);

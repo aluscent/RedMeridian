@@ -16,7 +16,7 @@ sealed partial class Colony
     public const long StockLimit = 1_000_000_000_000;
     const int MaxPopulation = 100_000_000;
     readonly GameRules rules;
-    public byte[] Grid { get; } = new byte[Size * Size];
+    public byte BuildingAt(int index) => surface.StructureAt(index).Type;
     readonly int[] counts;
     readonly int[] allowedBuildings;
     readonly Surface surface;
@@ -29,8 +29,19 @@ sealed partial class Colony
     readonly ProductionGroup[] observatories;
     public MapSettings MapSettings => surface.Settings;
     public ColonySite Site { get; }
-    public byte[] Widths => surface.Widths;
-    public byte[] Heights => surface.Heights;
+    public byte[] MapLayout()
+    {
+        int area = Site.Width * Site.Height;
+        var layout = new byte[area * 3];
+        foreach (var (index,structure) in surface.Structures)
+        {
+            int cell = (index / Size - Site.Top) * Site.Width + index % Size - Site.Left;
+            layout[cell] = structure.Type;
+            layout[cell + area] = structure.Width;
+            layout[cell + 2 * area] = structure.Height;
+        }
+        return layout;
+    }
     readonly Dictionary<string,long> stock, delta;
     readonly Dictionary<string,int> planet;
     readonly Dictionary<string,int> engineeringCredit = new();
@@ -92,7 +103,7 @@ sealed partial class Colony
         if (stress)
         {
             for (int i = 0; i < 100_000; i++)
-                Place(unchecked(i * 499979) & (Grid.Length - 1), allowedBuildings[i % allowedBuildings.Length],new Footprint());
+                Place(unchecked(i * 499979) & (Size * Size - 1), allowedBuildings[i % allowedBuildings.Length],new Footprint());
             foreach (var material in rules.Materials) stock[material.Id] = 100_000;
             population = 60_000;
         }
@@ -136,6 +147,7 @@ sealed partial class Colony
         engineeringWork.Clear();
         foreach (var group in producers)
         {
+            if (group.Count == 0) continue;
             var producer = group.Building;
             int output = OutputPower(group);
             int running = output == 0 ? 0 : Available(group, crew);
@@ -151,6 +163,7 @@ sealed partial class Colony
         int colonistsProduced = 0;
         foreach (var group in consumers)
         {
+            if (group.Count == 0) continue;
             var consumer = group.Building;
             int running = Available(group,crew);
             if (consumer.Power > 0)

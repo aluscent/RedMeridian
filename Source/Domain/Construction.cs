@@ -5,16 +5,15 @@ sealed partial class Colony
     int Level(int index) => levels.GetValueOrDefault(index,1);
     ProductionGroup Group(int index)
     {
-        var group = groups[Grid[index] - 1][Level(index) - 1];
+        var group = groups[BuildingAt(index) - 1][Level(index) - 1];
         return climate is not null && solarGroups.TryGetValue(group,out var variants)
             ? variants[climate.Sunlight(index)] : group;
     }
 
     void Place(int index,int type,Footprint shape,int level = 1,bool off = false)
     {
-        Grid[index] = (byte)type;
+        surface.Occupy(index,type,shape);
         counts[type - 1]++;
-        surface.Occupy(index,shape);
         if (level > 1) levels.Add(index,level);
         if (!TemperatureAllows(index,rules.Buildings[type-1],shape)) climateBlocked.Add(index);
         if (off) disabled.Add(index);
@@ -23,7 +22,7 @@ sealed partial class Colony
 
     public (string Message, TileEdit Edit) Build(int index,int type)
     {
-        if ((uint)index >= Grid.Length || type < 1 || type > counts.Length)
+        if ((uint)index >= Size * Size || type < 1 || type > counts.Length)
             throw new InvalidOperationException("Choose a valid tile and building.");
         var b = rules.Buildings[type - 1];
         if (!Site.Allows(b)) throw new InvalidOperationException("This facility cannot operate in this environment.");
@@ -41,7 +40,7 @@ sealed partial class Colony
     public (string Message, TileEdit Edit) Remove(int tile)
     {
         int index = RequireStructure(tile);
-        var b = rules.Buildings[Grid[index] - 1];
+        var b = rules.Buildings[BuildingAt(index) - 1];
         if (assemblyOrders.ContainsKey(index)) throw new InvalidOperationException("Finish spacecraft assembly before demolishing the yard.");
         var salvage = new Dictionary<string,long>();
         Demolish(index,salvage);
@@ -53,7 +52,7 @@ sealed partial class Colony
 
     public (string Message, TileEdit[] Edits) EditArea(int start,int end,int type)
     {
-        if ((uint)start >= Grid.Length || (uint)end >= Grid.Length || type < 0 || type > counts.Length)
+        if ((uint)start >= Size * Size || (uint)end >= Size * Size || type < 0 || type > counts.Length)
             throw new InvalidOperationException("Choose two valid corners and an area tool.");
         int x0 = Math.Min(start % Size,end % Size), x1 = Math.Max(start % Size,end % Size);
         int y0 = Math.Min(start / Size,end / Size), y1 = Math.Max(start / Size,end / Size);
@@ -108,7 +107,8 @@ sealed partial class Colony
     {
         int index = surface.AnchorAt(tile);
         if (index < 0) return null;
-        int type = Grid[index], level = Level(index);
+        var structure = surface.StructureAt(index);
+        int type = structure.Type, level = Level(index);
         var group = Group(index);
         var recipe = group.Building;
         bool off = disabled.Contains(index);
@@ -120,7 +120,7 @@ sealed partial class Colony
             ratedPowerOutput = OutputPower(group), powerUse = running ? recipe.Power : 0,
             ratedPowerUse = recipe.Power, outputs = recipe.Outputs,
             temperatureBlocked = climateBlocked.Contains(index),
-            width = (int)Widths[index], height = (int)Heights[index],
+            width = (int)structure.Width, height = (int)structure.Height,
             upgrade = level <= recipe.Upgrades.Length ? recipe.Upgrades[level - 1] : null,
             weatherForecast = weatherForecasts.GetValueOrDefault(index),
             assembly = assemblyOrders.GetValueOrDefault(index),
@@ -148,7 +148,7 @@ sealed partial class Colony
     public string Upgrade(int tile)
     {
         int index = RequireStructure(tile);
-        var b = rules.Buildings[Grid[index] - 1];
+        var b = rules.Buildings[BuildingAt(index) - 1];
         int level = Level(index);
         if (level > b.Upgrades.Length) throw new InvalidOperationException("This building has no further upgrades.");
         var upgrade = b.Upgrades[level - 1];
@@ -194,14 +194,13 @@ sealed partial class Colony
 
     void Demolish(int index,Dictionary<string,long>? salvage)
     {
-        int i = Grid[index] - 1;
+        int i = BuildingAt(index) - 1;
         bool wasDisabled = disabled.Remove(index);
         bool wasBlocked = climateBlocked.Remove(index);
         if (!wasDisabled && !wasBlocked) Group(index).Remove(index);
         levels.Remove(index);
         weatherForecasts.Remove(index);
         assemblyOrders.Remove(index);
-        Grid[index] = 0;
         counts[i]--;
         surface.Clear(index);
         if (salvage is null) return;

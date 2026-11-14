@@ -48,9 +48,8 @@ universe with mixed production, shortages, and a simultaneous wave of freight
 arrivals. The runner measures 30-second-equivalent batches of the current
 engine, then serializes and reloads the save in memory. Its timings exclude UI,
 network, and disk I/O. Due cargo still in transit includes blocked deliveries.
-The runner refuses workloads when fixed colony grids alone would use more than
-half the memory available to .NET. The 10,000-region and 30,000-base workload
-depends on compact colony storage.
+Colony maps store building anchors and footprints. The server constructs a
+tile layout on demand when the browser requests the selected map.
 
 ## Forecast dust storms
 
