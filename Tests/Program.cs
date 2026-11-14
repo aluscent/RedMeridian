@@ -13,6 +13,7 @@ var rules = new GameRules(Path.Combine(AppContext.BaseDirectory, "Config"));
     ("Observatory narrows forecasts and preserves the last reading when offline", WeatherObservatory),
     ("Spacecraft found bases, retain blocked cargo, and restore without duplicate delivery", SpaceLogistics),
     ("Recurring routes respect reserves and avoid counting inbound cargo twice", RecurringCargo),
+    ("Fleets can assemble beyond 32 ships and survive save and reload", FleetWithoutCap),
     ("Assembly pauses offline and preserves typed orders through saves", TimedAssembly),
     ("Telescope surveys spend research, pause offline, and unlock systems and galaxies on schedule", TelescopeDiscovery),
     ("Ship ranges, travel time, and galaxy research apply across discovered systems", IntergalacticTravel),
@@ -280,6 +281,20 @@ void RecurringCargo()
     for (int i = 0; i < 7; i++) program.Step();
     Equal(9L, program.Base(orbitId).Stock("alloy"));
     Equal<string?>(null, program.Export().Space!.Ships[1].Destination);
+}
+
+void FleetWithoutCap()
+{
+    var original = LaunchReadyProgram().Export();
+    var fleet = Enumerable.Range(1,32).Select(id => new Spacecraft(id,"mars")).ToArray();
+    var program = SpaceProgram.Restore(rules,original with { Space = original.Space! with { Ships = fleet } });
+    program.Step();
+    AssembleShuttle(program);
+    var expanded = program.Export();
+    Equal(33,expanded.Space!.Ships.Length);
+    var restored = SpaceProgram.Restore(rules,expanded).Export().Space!;
+    Equal(fleet[31],restored.Ships[31]);
+    Equal(33,restored.Ships[32].Id);
 }
 
 void TimedAssembly()

@@ -33,6 +33,25 @@ agreement and a save/load round trip. It starts its own server on a temporary
 local port and uses a separate save directory. GitHub Actions runs the suite
 and checks JavaScript syntax on pushes and pull requests.
 
+### Run the headless stress tester
+
+The runner uses the game simulation without a browser or server. From the
+project root, run this command for 100 surface regions and 30,000 spacecraft:
+
+```sh
+dotnet run --project Tools/Stress/RedMeridian.Stress.csproj -c Release -- --regions 100 --orbits 0 --ships 30000 --routes 30000 --batches 5 --speed 4
+```
+
+`--regions` includes the Mars landing region. Try 99, 100, 999, and 1,000
+regions to compare the planned engine thresholds. Each run uses a synthetic
+universe with mixed production, shortages, and a simultaneous wave of freight
+arrivals. The runner measures 30-second-equivalent batches of the current
+engine, then serializes and reloads the save in memory. Its timings exclude UI,
+network, and disk I/O. Due cargo still in transit includes blocked deliveries.
+The runner refuses workloads when fixed colony grids alone would use more than
+half the memory available to .NET. The 10,000-region and 30,000-base workload
+depends on compact colony storage.
+
 ## Forecast dust storms
 
 Build a **Weather Observatory** from the Research category and inspect it after
