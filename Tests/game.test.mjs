@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
+import { gzipSync, gunzipSync } from "node:zlib";
 
 const source = new URL("../Source/", import.meta.url);
 const readJson = async url => JSON.parse(await readFile(url, "utf8"));
@@ -218,7 +219,7 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   assert.equal(restored.site.width, site.width);
   assert.equal(restored.site.height, site.height);
 
-  const save = await readJson(join(saveDir, "colony.json"));
+  const save = JSON.parse(gunzipSync(await readFile(join(saveDir, "colony.json"))));
   const orbit = campaign.sites.find(site => site.kind === "orbit");
   const orbitStart = orbit.top * 1024 + orbit.left;
   const last = (orbit.top + orbit.height - 1) * 1024 + orbit.left + orbit.width - 1;
@@ -236,7 +237,19 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
     planetBounds: { width: terminator.width, height: terminator.height },
     map: { seed: terminator.seed, abundance: terminator.abundance, paint: {}, densityPercent: true } };
   save.space = { ...save.space, bases: { [orbit.id]: remote, [terminator.id]: climateBase }, ships: [] };
-  const imported = await command("import", { save, revision: restored.revision });
+  const importUrl = base + "/api/import?revision=" + restored.revision;
+  const invalid = await fetch(importUrl, { method: "POST", body: gzipSync("{invalid"), signal: t.signal });
+  assert.equal(invalid.status, 400);
+  assert.equal(JSON.parse(gunzipSync(await readFile(join(saveDir, "colony.json")))).space.bases[orbit.id], undefined);
+  const legacyUpload = await fetch(importUrl, {
+    method: "POST", body: "\uFEFF" + " ".repeat(31_000_000) + JSON.stringify(save), signal: t.signal
+  });
+  assert.equal(legacyUpload.status, 200);
+  const legacyImported = await legacyUpload.json();
+  const upload = await fetch(base + "/api/import?revision=" + legacyImported.state.revision,
+    { method: "POST", body: gzipSync(JSON.stringify(save)), signal: t.signal });
+  assert.equal(upload.status, 200);
+  const imported = await upload.json();
   const selected = await command("select-base", { base: orbit.id, revision: imported.state.revision });
   const { default: artwork } = await import("../Source/wwwroot/artwork.js");
   assert.deepEqual([...selected.state.allowedBuildings].sort((a, b) => a - b),

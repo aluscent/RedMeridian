@@ -21,10 +21,42 @@ app.MapGet("/api/map", (HttpContext context, ColonySession session) => session.M
 app.MapGet("/api/climate", (HttpContext context, ColonySession session) => session.Climate(context));
 app.MapGet("/api/logistics", (ColonySession session) => session.Logistics());
 app.MapPost("/api/command", (Command command, ColonySession session) => session.Apply(command));
+app.MapPost("/api/import", ImportColony);
 using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(250));
 var ticks = TickLoop(app.Services.GetRequiredService<ColonySession>(), app.Lifetime.ApplicationStopping);
 await app.RunAsync();
 await ticks;
+
+static async Task<IResult> ImportColony(HttpContext context, int revision, ColonySession session)
+{
+    var limit = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+    if (limit is { IsReadOnly: false }) limit.MaxRequestBodySize = SaveCodec.MaxUploadBytes;
+    if (context.Request.ContentLength > SaveCodec.MaxUploadBytes)
+        return Results.BadRequest(new { message = "Save file exceeds 64 MiB." });
+    try
+    {
+        using var file = new MemoryStream();
+        var buffer = new byte[64 * 1024];
+        int count;
+        while ((count = await context.Request.Body.ReadAsync(buffer,context.RequestAborted)) != 0)
+        {
+            if (file.Length + count > SaveCodec.MaxUploadBytes)
+                return Results.BadRequest(new { message = "Save file exceeds 64 MiB." });
+            file.Write(buffer,0,count);
+        }
+        file.Position = 0;
+        var save = SaveCodec.Read(file,limitExpandedSize: true);
+        return session.Apply(new("import",Revision: revision,Save: save));
+    }
+    catch (BadHttpRequestException error) when (error.StatusCode == StatusCodes.Status413PayloadTooLarge)
+    {
+        return Results.BadRequest(new { message = "Save file exceeds 64 MiB." });
+    }
+    catch (Exception error) when (error is JsonException or InvalidDataException)
+    {
+        return Results.BadRequest(new { message = "Invalid colony save. " + error.Message });
+    }
+}
 
 async Task TickLoop(ColonySession session, CancellationToken cancellation)
 {
@@ -54,7 +86,6 @@ sealed class ColonySession
     readonly string saveDirectory;
     string? activeSlot;
     readonly bool developerMode;
-    readonly JsonSerializerOptions json = new(JsonSerializerDefaults.Web);
     readonly GameRules rules;
     int diskVersion;
     bool started;
@@ -203,7 +234,7 @@ sealed class ColonySession
                     case "load":
                         string loadPath = SavePath(command.SaveSlot);
                         if (!File.Exists(loadPath)) throw new InvalidOperationException("No saved colony on disk.");
-                        var saved = JsonSerializer.Deserialize<SaveData>(File.ReadAllText(loadPath),json);
+                        var saved = ReadSave(loadPath);
                         Open(SpaceProgram.Restore(rules,saved));
                         activeSlot = command.SaveSlot;
                         diskVersion = saved!.Version;
@@ -338,7 +369,7 @@ sealed class ColonySession
                         throw new InvalidOperationException("Unknown command.");
                 }
             }
-            catch (Exception error) when (error is InvalidOperationException or JsonException)
+            catch (Exception error) when (error is InvalidOperationException or JsonException or InvalidDataException)
             {
                 return Results.BadRequest(new { message = error.Message, state = State() });
             }
@@ -384,15 +415,27 @@ sealed class ColonySession
         var fullPath = SavePath(slot);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         var temporary = fullPath + ".tmp";
-        File.WriteAllText(temporary, JsonSerializer.Serialize(colony.Export(), json));
-        if (File.Exists(fullPath))
+        try
         {
-            if (existingVersion == 0)
-                existingVersion = JsonSerializer.Deserialize<SaveData>(File.ReadAllText(fullPath),json)?.Version ?? 0;
-            string backup = fullPath + (existingVersion < 3 ? ".pre-v3" : ".pre-v4");
-            if (existingVersion is > 0 and < 4 && !File.Exists(backup)) File.Copy(fullPath,backup);
+            using (var output = File.Create(temporary)) SaveCodec.Write(output,colony.Export());
+            if (File.Exists(fullPath))
+            {
+                if (existingVersion == 0) existingVersion = ReadSave(fullPath)?.Version ?? 0;
+                string backup = fullPath + (existingVersion < 3 ? ".pre-v3" : ".pre-v4");
+                if (existingVersion is > 0 and < 4 && !File.Exists(backup)) File.Copy(fullPath,backup);
+            }
+            File.Move(temporary,fullPath,overwrite: true);
         }
-        File.Move(temporary, fullPath, overwrite: true);
+        finally
+        {
+            File.Delete(temporary);
+        }
+    }
+
+    static SaveData? ReadSave(string path)
+    {
+        using var input = File.OpenRead(path);
+        return SaveCodec.Read(input);
     }
 }
 

@@ -194,6 +194,9 @@ of effective work per metric from its starting value.
 `%LOCALAPPDATA%\RedMeridian\colony.json` remains available as **Default colony**.
 Use **Save as** to create a named slot. **Save colony** updates the active slot.
 Named slots live next to the default file in `colony.json.slots`.
+New saves use gzip compression and keep the existing slot filenames. The game
+can still load and import older plain JSON saves. **Import colony file** accepts
+either format up to 64 MiB on disk and 256 MiB after decompression.
 
 Open **Control Panel** for research milestones, engineering progress, shipyard
 orders, the fleet and launch controls, and the star map. The star map lists

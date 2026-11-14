@@ -621,13 +621,15 @@ function notice(message,error=false) {
   if(!state?.started) $("menuNotice").textContent=message;
   $("notice").classList.toggle("error",error);
 }
-async function command(action,extra={}) {
+async function command(action,extra={},file=null) {
   if(pending || !state) return;
   pending=true;
   try {
     await refresh;
     const previous=mapRevision;
-    const response=await fetch("/api/command",{
+    const response=file ? await fetch("/api/import?revision="+state.revision,{
+      method:"POST",body:file
+    }) : await fetch("/api/command",{
       method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({action,revision:previous,...extra})
     });
@@ -989,8 +991,8 @@ $("file").onchange=async event=>{
   event.target.value="";
   if(!file || !confirm("Import this colony and replace the save on disk?")) return;
   try {
-    if(file.size>30_000_000) throw new Error("Save file is too large.");
-    await command("import",{save:JSON.parse(await file.text())});
+    if(file.size>64*1024*1024) throw new Error("Save file exceeds 64 MiB.");
+    await command("import",{},file);
   } catch(error) { notice(error.message,true); }
 };
 

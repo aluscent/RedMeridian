@@ -30,7 +30,8 @@ try
 
     GC.Collect(); // Release the first campaign before measuring a load.
     var clock = Stopwatch.StartNew();
-    var restored = scenario.Restore(JsonSerializer.Deserialize<SaveData>(save,json)!);
+    using var input = new MemoryStream(save,writable: false);
+    var restored = scenario.Restore(SaveCodec.Read(input)!);
     Console.WriteLine($"Save load and restore: {clock.Elapsed.TotalMilliseconds:N1} ms");
     var restoredSave = restored.Export();
     if (restoredSave.Tick != finalTick || restoredSave.Space?.Bases.Count != regions + orbits - 1 ||
@@ -89,9 +90,13 @@ static byte[] Run(StressScenario scenario, int batches, int speed, JsonSerialize
     Console.WriteLine($"Due cargo still in transit at batch boundaries: peak {peakOverdue:N0}, final {program.CountDueShipments():N0}");
     finalTick = program.Mars.Tick;
     clock.Restart();
-    byte[] save = JsonSerializer.SerializeToUtf8Bytes(program.Export(),json);
-    Console.WriteLine($"Save export and encoding: {clock.Elapsed.TotalMilliseconds:N1} ms, {save.Length:N0} bytes");
-    return save;
+    var snapshot = program.Export();
+    using var output = new MemoryStream();
+    SaveCodec.Write(output,snapshot);
+    Console.WriteLine($"Save export and gzip encoding: {clock.Elapsed.TotalMilliseconds:N1} ms, {output.Length:N0} bytes");
+    long plainBytes = JsonSerializer.SerializeToUtf8Bytes(snapshot,json).LongLength;
+    Console.WriteLine($"Equivalent plain JSON: {plainBytes:N0} bytes, {1 - output.Length / (double)plainBytes:P1} smaller with gzip");
+    return output.ToArray();
 }
 
 static double MiB(long bytes) => bytes / 1048576.0;
