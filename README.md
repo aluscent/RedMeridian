@@ -197,6 +197,15 @@ Named slots live next to the default file in `colony.json.slots`.
 New saves use gzip compression and keep the existing slot filenames. The game
 can still load and import older plain JSON saves. **Import colony file** accepts
 either format up to 64 MiB on disk and 256 MiB after decompression.
+Version 5 saves preserve map IDs and per-map building instance IDs. Older saves
+receive building IDs on load. The first overwrite of a v4 save keeps a
+`.pre-v5` backup.
+
+The map catalog exposes a region ID and its map ID. Tile addresses use the map
+ID and the existing grid coordinates. `/api/map-resources?mapId=map:mars`
+returns inventory and observed production, consumption, and freight quantities
+for one established map in the current simulation tick. Construction and other
+direct purchases change inventory outside the production and freight counters.
 
 Open **Control Panel** for research milestones, engineering progress, shipyard
 orders, the fleet and launch controls, and the star map. The star map lists

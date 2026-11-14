@@ -15,7 +15,7 @@ sealed class Surface
     readonly GameRules rules;
     readonly ColonySite? site;
     public MapSettings Settings { get; }
-    public readonly record struct Structure(byte Type, byte Width, byte Height)
+    public readonly record struct Structure(byte Type, byte Width, byte Height, int BuildingId)
     {
         public Footprint Footprint => new(Width,Height);
     }
@@ -73,8 +73,8 @@ sealed class Surface
     public bool Open(int index,Footprint shape) => Fits(index,shape) &&
         Tiles(index,shape).All(tile => AnchorAt(tile) < 0);
 
-    public void Occupy(int index,int type,Footprint shape) =>
-        structures.Add(index,new((byte)type,(byte)shape.Width,(byte)shape.Height));
+    public void Occupy(int index,int type,Footprint shape,int buildingId) =>
+        structures.Add(index,new((byte)type,(byte)shape.Width,(byte)shape.Height,buildingId));
 
     public void Clear(int index) => structures.Remove(index);
 }

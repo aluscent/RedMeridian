@@ -215,6 +215,8 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   await command("load");
   const restored = await (await get(`/api/state?inspect=${naturalOre}`)).json();
   assert.equal(restored.inspected.type, mine.id);
+  assert.ok(restored.inspected.buildingId > 0);
+  assert.deepEqual(restored.inspected.tile, { mapId: "map:mars", x: naturalOre % 1024, y: Math.floor(naturalOre / 1024) });
   assert.equal(restored.hasSave, true);
   assert.equal(restored.site.width, site.width);
   assert.equal(restored.site.height, site.height);
@@ -227,12 +229,14 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   const drill = catalog.buildings.find(building => building.art === "drill");
   const telescope = catalog.buildings.find(building => building.spaceRole === "telescope");
   const telescopeIndex = orbitStart + 3;
-  const remote = { ...save, tiles: [[last, solar.id], [orbitStart, drill.id],
-    [orbitStart + 2, solar.id], [telescopeIndex, telescope.id]], materials: { ...save.materials, research: 300 },
+  const remote = { ...save, mapId: orbit.mapId, lastBuildingId: 4, resourceFlows: null,
+    tiles: [[last, solar.id, 1], [orbitStart, drill.id, 2],
+    [orbitStart + 2, solar.id, 3], [telescopeIndex, telescope.id, 4]], materials: { ...save.materials, research: 300 },
     structures: [{ index: orbitStart, width: 2, height: 2, disabled: true }], longOrbit: true,
     planetBounds: null, weatherForecasts: null, map: { seed: orbit.seed, abundance: 0, paint: {} }, space: null };
   const terminator = campaign.sites.find(site => site.id === "terminator");
-  const climateBase = { ...remote, longOrbit: false, tiles: [[511*1024+511, solar.id]],
+  const climateBase = { ...remote, mapId: terminator.mapId, lastBuildingId: 1,
+    longOrbit: false, tiles: [[511*1024+511, solar.id, 1]],
     structures: [],
     planetBounds: { width: terminator.width, height: terminator.height },
     map: { seed: terminator.seed, abundance: terminator.abundance, paint: {}, densityPercent: true } };
@@ -241,15 +245,29 @@ test("live game serves the map, rejects stale edits, and reloads an isolated sav
   const invalid = await fetch(importUrl, { method: "POST", body: gzipSync("{invalid"), signal: t.signal });
   assert.equal(invalid.status, 400);
   assert.equal(JSON.parse(gunzipSync(await readFile(join(saveDir, "colony.json")))).space.bases[orbit.id], undefined);
+  const version4 = ({ mapId, lastBuildingId, resourceFlows, ...colony }) =>
+    ({ ...colony, version: 4, tiles: colony.tiles.map(tile => tile.slice(0, 2)) });
+  const legacy = version4(save);
+  legacy.space = { ...save.space, bases: Object.fromEntries(
+    Object.entries(save.space.bases).map(([id, colony]) => [id, version4(colony)])) };
   const legacyUpload = await fetch(importUrl, {
-    method: "POST", body: "\uFEFF" + " ".repeat(31_000_000) + JSON.stringify(save), signal: t.signal
+    method: "POST", body: "\uFEFF" + " ".repeat(31_000_000) + JSON.stringify(legacy), signal: t.signal
   });
   assert.equal(legacyUpload.status, 200);
   const legacyImported = await legacyUpload.json();
+  const migrated = JSON.parse(gunzipSync(await readFile(join(saveDir, "colony.json"))));
+  assert.equal(migrated.version, 5);
+  assert.equal(migrated.space.bases[orbit.id].mapId, orbit.mapId);
+  assert.equal(new Set(migrated.space.bases[orbit.id].tiles.map(tile => tile[2])).size, 4);
   const upload = await fetch(base + "/api/import?revision=" + legacyImported.state.revision,
     { method: "POST", body: gzipSync(JSON.stringify(save)), signal: t.signal });
   assert.equal(upload.status, 200);
   const imported = await upload.json();
+  const orbitResources = await (await get(`/api/map-resources?mapId=${encodeURIComponent(orbit.mapId)}`)).json();
+  assert.equal(orbitResources.mapId, orbit.mapId);
+  assert.equal(orbitResources.materials.research.stock, 300);
+  assert.equal(orbitResources.tick, imported.state.tick);
+  assert.equal((await fetch(base + "/api/map-resources?mapId=map%3Aunknown", { signal: t.signal })).status, 404);
   const selected = await command("select-base", { base: orbit.id, revision: imported.state.revision });
   const { default: artwork } = await import("../Source/wwwroot/artwork.js");
   assert.deepEqual([...selected.state.allowedBuildings].sort((a, b) => a - b),

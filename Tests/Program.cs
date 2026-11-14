@@ -6,6 +6,8 @@ var rules = new GameRules(Path.Combine(AppContext.BaseDirectory, "Config"));
 (string Name, Action Run)[] tests =
 [
     ("New planet bounds vary and old colonies preserve full maps", PlanetBounds),
+    ("Map and building IDs persist and demolished IDs are never reused", PersistentMapIds),
+    ("Map resource accounting preserves actual production and consumption", ResourceAccounting),
     ("Battery charge, discharge and capacity limits", BatteryLimits),
     ("Footprint ownership and map boundaries", FootprintOwnership),
     ("Area build rejects unaffordable orders without partial edits", AreaBuildIsAtomic),
@@ -75,14 +77,14 @@ void FootprintOwnership()
     Equal(false, Surface.Fits(Colony.Size - 1, shape));
     Equal(false, Surface.Fits(Colony.Size * (Colony.Size - 1), shape));
     Equal(true, surface.Open(0, shape));
-    surface.Occupy(0, 1, shape);
+    surface.Occupy(0, 1, shape, 1);
     Equal(0, surface.AnchorAt(Colony.Size + 1));
     Equal(false, surface.Open(1, shape));
     surface.Clear(0);
     Equal(-1, surface.AnchorAt(Colony.Size + 1));
     Equal(true, surface.Open(1, shape));
     int rightEdge = 2 * Colony.Size - 1;
-    surface.Occupy(rightEdge, 1, new(1,4));
+    surface.Occupy(rightEdge, 1, new(1,4), 2);
     Equal(rightEdge, surface.AnchorAt(rightEdge + 3 * Colony.Size));
     Equal(-1, surface.AnchorAt(rightEdge + 1));
 }
@@ -115,6 +117,42 @@ void PlanetBounds()
     Equal((byte)solar.Id, oldRestored.BuildingAt(0));
 }
 
+void PersistentMapIds()
+{
+    var legacy = new Colony(rules,empty: true).Export() with { Version = 4, Tiles = [[0,1],[1,1]] };
+    var colony = Colony.Restore(rules,legacy);
+    Equal("map:mars",colony.Site.MapId);
+    Equal(1,colony.Export().Tiles![0][2]);
+    Equal(2,colony.Export().Tiles![1][2]);
+    colony.Toggle(1);
+    colony.Remove(1);
+    colony = Colony.Restore(rules,colony.Export());
+    colony.Build(1,1);
+    var save = colony.Export();
+    Equal(3,save.Tiles![1][2]);
+    Equal(1,save.Tiles[0][2]);
+    Reject(() => Colony.Restore(rules,save with { MapId = "map:venus" }));
+    Reject(() => Colony.Restore(rules,save with { Tiles = [[0,1,1],[1,1,1]] }));
+}
+
+void ResourceAccounting()
+{
+    var colony = new Colony(rules);
+    var before = colony.Export().Materials!;
+    colony.Step();
+    var save = colony.Export();
+    var restored = Colony.Restore(rules,save);
+    foreach (var material in rules.Materials)
+    {
+        string id = material.Id;
+        var flow = colony.ResourceFlowFor(id);
+        Equal(colony.Stock(id) - before[id],flow.NetProduction);
+        Equal(flow,restored.ResourceFlowFor(id));
+    }
+    Equal(true,colony.ResourceFlowFor("ore").Produced > 0);
+    Equal(true,colony.ResourceFlowFor("food").Consumed > 0);
+}
+
 void AreaBuildIsAtomic()
 {
     var solar = rules.Buildings.Single(b => b.Art == "solar");
@@ -136,7 +174,7 @@ void StarterProduction()
     Equal(true, colony.Export().Materials!["ore"] > initial.Materials!["ore"]);
 
     var solar = rules.Buildings.Single(b => b.Art == "solar");
-    var beforeStorm = initial with { Tiles = [[0, solar.Id]], Tick = rules.World.Storm.Start - 1 };
+    var beforeStorm = initial with { Version = 4, Tiles = [[0, solar.Id]], Tick = rules.World.Storm.Start - 1 };
     var solarColony = Colony.Restore(rules, beforeStorm);
     using var calm = Status(solarColony);
     Equal((long)solar.Generation, calm.RootElement.GetProperty("supply").GetInt64());
@@ -287,9 +325,16 @@ void RecurringCargo()
     program.Step();
     Equal((long)reserve, program.Mars.Stock("alloy"));
     Equal(9L, program.Export().Space!.Ships[1].Cargo!["alloy"]);
+    Equal(9L, program.Mars.ResourceFlowFor("alloy").Outbound);
     Equal<string?>(null, program.Export().Space!.Ships[2].Destination);
-    for (int i = 0; i < 7; i++) program.Step();
+    long delivered = 0;
+    for (int i = 0; i < 7; i++)
+    {
+        program.Step();
+        delivered += program.Base(orbitId).ResourceFlowFor("alloy").Inbound;
+    }
     Equal(9L, program.Base(orbitId).Stock("alloy"));
+    Equal(9L, delivered);
     Equal<string?>(null, program.Export().Space!.Ships[1].Destination);
 }
 
@@ -437,7 +482,8 @@ void IntergalacticTravel()
     Reject(() => program.Mars.ActivateResearch(galaxy.Technology));
     var nextSave = program.Export();
     nextSave.Space!.Bases.Add("cinder-outer-orbit", world.Export() with
-        { Tiles = [[center,rules.Buildings.Single(b => b.SpaceRole == "hub").Id]],
+        { Tiles = [[center,rules.Buildings.Single(b => b.SpaceRole == "hub").Id,1]], LastBuildingId = 1,
+            MapId = "map:cinder-outer-orbit",
             Climate = null, PlanetBounds = null, LongOrbit = true, ActivatedResearch = [] });
     program = SpaceProgram.Restore(rules,nextSave);
     Equal(true,program.MaterialAvailable(sample));
@@ -500,7 +546,8 @@ void GeneratedCampaignRoundTrip()
     int Building(string role) => rules.Buildings.Single(b => b.SpaceRole == role).Id;
     save.Space!.Bases[station.Id] = save with
     {
-        Tiles = [[center,Building("telescope")],[center+1,1]], Structures = [], PlanetBounds = null,
+        Tiles = [[center,Building("telescope"),1],[center+1,1,2]], LastBuildingId = 2, MapId = station.MapId,
+        Structures = [], PlanetBounds = null,
         LongOrbit = true, Map = new(station.Seed,station.Abundance), Space = null
     };
     save.Space.Bases[station.Id].Materials!["research"] = 300;
@@ -546,7 +593,7 @@ void PlanetaryEngineering()
     initial.Materials["propellant"] = 50_000;
     initial.Materials["food"] = 10_000;
     initial.Materials["water"] = 10_000;
-    initial = initial with { Tiles = [[center, heat.Id], [center+1, 1], [center+2, 1], [center+3, 6]] };
+    initial = initial with { Version = 4, Tiles = [[center, heat.Id], [center+1, 1], [center+2, 1], [center+3, 6]] };
     var mars = Colony.Restore(rules, initial);
     var europa = Colony.Restore(rules, initial, ColonySite.All.Single(site => site.Id == "europa"));
     var temperature = rules.World.Metrics.Single(metric => metric.Id == "temperature");
@@ -624,7 +671,7 @@ void UnstaffedHousing()
     var save = new Colony(rules,empty: true).Export();
     var colony = Colony.Restore(rules,save with
     {
-        Population = 0,
+        Population = 0, Version = 4,
         Tiles = [[anchor,solar.Id],[anchor+1,habitat.Id]]
     });
 
@@ -657,7 +704,7 @@ void PopulationGrowth()
     large.Materials!["food"] = large.Materials["water"] = 10_000;
     large = large with
     {
-        Population = 99, MigrationCredit = 95, Tick = 5,
+        Population = 99, MigrationCredit = 95, Tick = 5, Version = 4,
         Tiles = [[start,array.Id],[start+1,array.Id],[start+2,array.Id],
             [start+Colony.Size,dome.Id],[start+Colony.Size+3,dome.Id],[start+Colony.Size+6,dome.Id]]
     };
@@ -684,7 +731,7 @@ void PopulationGrowth()
     var site = Terminator();
     var outpost = new Colony(rules,empty: true,site: site).Export();
     var tiles = new[] { new[] {anchor,solar.Id}, [anchor+1,solar.Id], [anchor+2,habitat.Id], [anchor+Colony.Size,facility.Id] };
-    colony = Colony.Restore(rules,outpost with { Population = 2,Tiles = tiles },site);
+    colony = Colony.Restore(rules,outpost with { Version = 4, Population = 2,Tiles = tiles },site);
     colony.Step();
     Equal(3,colony.Export().Population);
     colony.Toggle(anchor+Colony.Size);
@@ -708,7 +755,7 @@ void OceanTransitions()
     var liquid = new ClimateSettings(-15,100);
     foreach (int degrees in new[] {-200,200})
     {
-        var save = empty with { Climate = new(degrees,0), Tiles = [[ocean,solar.Id]],
+        var save = empty with { Version = 4, Climate = new(degrees,0), Tiles = [[ocean,solar.Id]],
             Structures = [new(ocean,2,2)] };
         var colony = Colony.Restore(rules, save, site);
         Equal(1, colony.ChangeClimate(liquid));
@@ -735,7 +782,7 @@ void ClimateOperation()
     var extractor = rules.Buildings.Single(building => building.Deposit == "ice");
     var empty = new Colony(rules, empty: true, site: site, map: new(site.Seed,10,
         new() { [ice] = "ice" },DensityPercent: true)).Export();
-    var colony = Colony.Restore(rules,empty with { Tiles = [[dark,solar.Id],[bright,solar.Id],[ice,extractor.Id]] },site);
+    var colony = Colony.Restore(rules,empty with { Version = 4, Tiles = [[dark,solar.Id],[bright,solar.Id],[ice,extractor.Id]] },site);
     colony.Step();
     using var initial = Status(colony);
     Equal((long)solar.Generation, initial.RootElement.GetProperty("supply").GetInt64());
@@ -833,7 +880,7 @@ void InvalidSave()
 {
     var save = new Colony(rules, empty: true).Export() with
     {
-        Tiles = [[0, 1], [1, 1]],
+        Tiles = [[0, 1, 1], [1, 1, 2]], LastBuildingId = 2,
         Structures = [new SavedStructure(0, Width: 2)]
     };
     Reject(() => Colony.Restore(rules, save));

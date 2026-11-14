@@ -64,6 +64,7 @@ sealed class GameRules
     readonly string?[] depositBuckets;
     public Building[] Buildings { get; }
     public Material[] Materials { get; }
+    public IReadOnlyDictionary<string,int> MaterialSlots { get; }
     public Technology[] Research { get; }
     public WorldRules World { get; }
     public ShipType[] ShipTypes { get; }
@@ -105,6 +106,7 @@ sealed class GameRules
             "Planet sizes must cover 8,000–14,000 tiles, with a narrow width allowed for the Terminator.");
 
         var materialIds = Unique(Materials.Select(m => m.Id), "material");
+        MaterialSlots = Materials.Select((material,index) => (material.Id,index)).ToDictionary(item => item.Id,item => item.index);
         var shipIds = Unique(ShipTypes.Select(ship => ship.Id), "spacecraft");
         Require(shipIds.Contains(LegacyShipType) && ShipTypes.All(ship => !string.IsNullOrWhiteSpace(ship.Name) &&
             ship.Payload is > 0 and <= 10_000 && ship.FuelPercent is > 0 and <= 1_000 &&
